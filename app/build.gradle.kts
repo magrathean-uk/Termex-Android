@@ -85,8 +85,11 @@ dependencies {
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.biometric:biometric:1.1.0")
 
-    // SSH - JSch
-    implementation("com.jcraft:jsch:0.1.55")
+    // SSH - SSHJ
+    implementation("com.hierynomus:sshj:0.39.0")
+    implementation("org.slf4j:slf4j-simple:2.0.13")
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.78.1")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
 
     // Billing
     implementation("com.android.billingclient:billing-ktx:7.1.1")

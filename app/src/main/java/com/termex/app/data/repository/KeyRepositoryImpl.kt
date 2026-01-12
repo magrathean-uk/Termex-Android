@@ -1,8 +1,6 @@
 package com.termex.app.data.repository
 
 import android.content.Context
-import com.jcraft.jsch.JSch
-import com.jcraft.jsch.KeyPair
 import com.termex.app.domain.KeyRepository
 import com.termex.app.domain.SSHKey
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -12,8 +10,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.bouncycastle.openssl.jcajce.JcaPEMWriter
 import java.io.File
-import java.io.FileOutputStream
+import java.io.FileWriter
+import java.security.KeyPairGenerator
+import java.security.interfaces.RSAPrivateKey
+import java.security.interfaces.RSAPublicKey
+import java.util.Base64
 import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -27,7 +30,6 @@ class KeyRepositoryImpl @Inject constructor(
         File(context.filesDir, "ssh_keys").apply { mkdirs() }
     }
     
-    // Simple file watcher mechanism (using flow emit on changes)
     private val refreshTrigger = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(replay = 1)
 
     init {
@@ -47,7 +49,7 @@ class KeyRepositoryImpl @Inject constructor(
                         name = file.name,
                         path = file.absolutePath,
                         publicKey = pubKeyContent,
-                        type = if (pubKeyContent.startsWith("ssh-rsa")) "RSA" else "UNKNOWN", // Simplified type check
+                        type = if (pubKeyContent.startsWith("ssh-rsa")) "RSA" else "UNKNOWN",
                         lastModified = Date(file.lastModified())
                     )
                 }.sortedBy { it.name }
@@ -58,23 +60,52 @@ class KeyRepositoryImpl @Inject constructor(
     }
 
     override suspend fun generateKey(name: String, type: String, bits: Int) = withContext(Dispatchers.IO) {
-        val jsch = JSch()
-        val keyPair = KeyPair.genKeyPair(jsch, KeyPair.RSA, bits)
+        // Only RSA supported for now in UI flow, but scalable
+        val keyGen = KeyPairGenerator.getInstance("RSA")
+        keyGen.initialize(bits)
+        val pair = keyGen.generateKeyPair()
+        
+        val privateKey = pair.private as RSAPrivateKey
+        val publicKey = pair.public as RSAPublicKey
         
         val privateKeyFile = File(keysDir, name)
         val publicKeyFile = File(keysDir, "$name.pub")
         
-        val privOut = FileOutputStream(privateKeyFile)
-        val pubOut = FileOutputStream(publicKeyFile)
+        // Write Private Key (PEM)
+        FileWriter(privateKeyFile).use { fw ->
+            JcaPEMWriter(fw).use { pemWriter ->
+                pemWriter.writeObject(privateKey)
+            }
+        }
         
-        keyPair.writePrivateKey(privOut)
-        keyPair.writePublicKey(pubOut, name)
-        
-        privOut.close()
-        pubOut.close()
-        keyPair.dispose()
+        // Write Public Key (OpenSSH format)
+        // Format: ssh-rsa <base64> name
+        val pubKeyString = encodePublicKey(publicKey, name)
+        publicKeyFile.writeText(pubKeyString)
         
         refreshTrigger.emit(Unit)
+    }
+    
+    private fun encodePublicKey(publicKey: RSAPublicKey, comment: String): String {
+        val byteOs = java.io.ByteArrayOutputStream()
+        val dos = java.io.DataOutputStream(byteOs)
+        
+        val type = "ssh-rsa".toByteArray()
+        dos.writeInt(type.size)
+        dos.write(type)
+        
+        val e = publicKey.publicExponent.toByteArray()
+        dos.writeInt(e.size)
+        dos.write(e)
+        
+        val m = publicKey.modulus.toByteArray()
+        // Ensure positive modulus logic if needed (usually toByteArray handles signed, might need leading 0)
+        // BigInteger.toByteArray returns signed, so if top bit set, it adds 0x00. Correct for SSH.
+        dos.writeInt(m.size)
+        dos.write(m)
+        
+        val b64 = Base64.getEncoder().encodeToString(byteOs.toByteArray())
+        return "ssh-rsa $b64 $comment"
     }
 
     override suspend fun importKey(name: String, privateKeyContent: String, publicKeyContent: String?) = withContext(Dispatchers.IO) {

@@ -52,11 +52,10 @@ fun TerminalScreen(
     viewModel: TerminalViewModel = hiltViewModel()
 ) {
     val connectionState by viewModel.connectionState.collectAsState()
-    val terminalBuffer by viewModel.terminalBuffer.collectAsState()
     val currentServer by viewModel.currentServer.collectAsState()
     val needsPassword by viewModel.needsPassword.collectAsState()
-    val lines by terminalBuffer.contentFlow.collectAsState()
-    val cursorPosition by terminalBuffer.cursorPosition.collectAsState()
+    val lines by viewModel.terminalLines.collectAsState()
+    val cursorPosition by viewModel.cursorPosition.collectAsState()
     
     var ctrlActive by remember { mutableStateOf(false) }
     var altActive by remember { mutableStateOf(false) }

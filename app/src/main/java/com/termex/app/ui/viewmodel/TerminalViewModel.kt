@@ -26,8 +26,10 @@ class TerminalViewModel @Inject constructor(
     
     val connectionState: StateFlow<SSHConnectionState> = sshClient.connectionState
     
-    private val _terminalBuffer = MutableStateFlow(TerminalBuffer())
-    val terminalBuffer: StateFlow<TerminalBuffer> = _terminalBuffer.asStateFlow()
+    // Expose buffer directly - its internal flows handle reactivity
+    private val terminalBuffer = TerminalBuffer()
+    val terminalLines: StateFlow<List<TerminalBuffer.TerminalLine>> = terminalBuffer.contentFlow
+    val cursorPosition: StateFlow<Pair<Int, Int>> = terminalBuffer.cursorPosition
     
     private val _currentServer = MutableStateFlow<Server?>(null)
     val currentServer: StateFlow<Server?> = _currentServer.asStateFlow()
@@ -91,16 +93,14 @@ class TerminalViewModel @Inject constructor(
             
             try {
                 while (isActive && sshClient.isConnected()) {
-                    val available = inputStream.available()
-                    if (available > 0) {
-                        val bytesRead = inputStream.read(buffer, 0, minOf(available, buffer.size))
-                        if (bytesRead > 0) {
-                            val data = String(buffer, 0, bytesRead, Charsets.UTF_8)
-                            _terminalBuffer.value.write(data)
-                        }
-                    } else {
-                        // Small delay to prevent busy waiting
-                        kotlinx.coroutines.delay(10)
+                    // Blocking read is efficient and correct for network streams
+                    val bytesRead = inputStream.read(buffer)
+                    if (bytesRead > 0) {
+                        val data = String(buffer, 0, bytesRead, Charsets.UTF_8)
+                        terminalBuffer.write(data)
+                    } else if (bytesRead == -1) {
+                        // End of stream
+                        break
                     }
                 }
             } catch (e: Exception) {
@@ -113,7 +113,7 @@ class TerminalViewModel @Inject constructor(
         viewModelScope.launch {
             sshClient.sendData(data)
             // Auto-scroll to bottom on input
-            _terminalBuffer.value.scrollToBottom()
+            terminalBuffer.scrollToBottom()
         }
     }
     
@@ -123,14 +123,13 @@ class TerminalViewModel @Inject constructor(
     
     fun resizeTerminal(cols: Int, rows: Int) {
         sshClient.resizeTerminal(cols, rows)
-        _terminalBuffer.value = _terminalBuffer.value.resize(cols, rows)
     }
     
     fun disconnect() {
         readJob?.cancel()
         readJob = null
         sshClient.disconnect()
-        _terminalBuffer.value.clear()
+        terminalBuffer.clear()
         _currentServer.value = null
     }
     
