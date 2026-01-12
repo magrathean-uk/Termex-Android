@@ -1,0 +1,54 @@
+[
+    {
+        "merged": "com.termex.app-debug-86:/mipmap-hdpi_ic_launcher_round.png.flat",
+        "source": "com.termex.app-main-88:/mipmap-hdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.termex.app-debug-86:/xml_data_extraction_rules.xml.flat",
+        "source": "com.termex.app-main-88:/xml/data_extraction_rules.xml"
+    },
+    {
+        "merged": "com.termex.app-debug-86:/mipmap-xhdpi_ic_launcher.png.flat",
+        "source": "com.termex.app-main-88:/mipmap-xhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.termex.app-debug-86:/xml_network_security_config.xml.flat",
+        "source": "com.termex.app-main-88:/xml/network_security_config.xml"
+    },
+    {
+        "merged": "com.termex.app-debug-86:/mipmap-xxxhdpi_ic_launcher.png.flat",
+        "source": "com.termex.app-main-88:/mipmap-xxxhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.termex.app-debug-86:/mipmap-hdpi_ic_launcher.png.flat",
+        "source": "com.termex.app-main-88:/mipmap-hdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.termex.app-debug-86:/mipmap-xxhdpi_ic_launcher_round.png.flat",
+        "source": "com.termex.app-main-88:/mipmap-xxhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.termex.app-debug-86:/mipmap-mdpi_ic_launcher.png.flat",
+        "source": "com.termex.app-main-88:/mipmap-mdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.termex.app-debug-86:/mipmap-xxhdpi_ic_launcher.png.flat",
+        "source": "com.termex.app-main-88:/mipmap-xxhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.termex.app-debug-86:/xml_backup_rules.xml.flat",
+        "source": "com.termex.app-main-88:/xml/backup_rules.xml"
+    },
+    {
+        "merged": "com.termex.app-debug-86:/mipmap-xxxhdpi_ic_launcher_round.png.flat",
+        "source": "com.termex.app-main-88:/mipmap-xxxhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.termex.app-debug-86:/mipmap-xhdpi_ic_launcher_round.png.flat",
+        "source": "com.termex.app-main-88:/mipmap-xhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.termex.app-debug-86:/mipmap-mdpi_ic_launcher_round.png.flat",
+        "source": "com.termex.app-main-88:/mipmap-mdpi/ic_launcher_round.png"
+    }
+]

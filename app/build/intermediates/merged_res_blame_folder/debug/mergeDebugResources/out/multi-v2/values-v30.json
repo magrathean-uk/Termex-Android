@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.termex.app-mergeDebugResources-84:/values-v30/values-v30.xml",
+            "map": [
+                {
+                    "source": "/Users/bolyki/.gradle/caches/8.13/transforms/b2a7e3c5ff8ac4c82d5eb92cb819d85d/transformed/material3-release/res/values-v30/values-v30.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "72",
+                        "endOffsets": "123"
+                    }
+                }
+            ]
+        }
+    ]
+}

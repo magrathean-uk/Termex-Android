@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.termex.app-mergeDebugResources-84:/values-h720dp-v13/values-h720dp-v13.xml",
+            "map": [
+                {
+                    "source": "/Users/bolyki/.gradle/caches/8.13/transforms/5d5096279a05911ec5b064ebf155682d/transformed/appcompat-1.6.1/res/values-h720dp-v13/values-h720dp-v13.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "66",
+                        "endOffsets": "117"
+                    }
+                }
+            ]
+        }
+    ]
+}
