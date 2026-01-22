@@ -1,6 +1,7 @@
 package com.termex.app.ui.screens
 
 import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -13,7 +14,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -31,14 +31,20 @@ import kotlinx.coroutines.launch
 @Composable
 fun PaywallScreen(
     onSubscribed: () -> Unit,
-    onRestore: () -> Unit,
-    onSkip: () -> Unit = {}
+    onRestore: () -> Unit
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
     val subscriptionManager = SubscriptionManager.getInstance(context)
     val subscriptionState by subscriptionManager.subscriptionState.collectAsState()
     val scope = rememberCoroutineScope()
+    
+    // CRITICAL: Block back button - paywall CANNOT be skipped
+    // Users MUST subscribe or restore purchases to proceed
+    BackHandler(enabled = true) {
+        // Do nothing - intentionally blocking back navigation
+        // The paywall is mandatory and cannot be bypassed
+    }
     
     // Navigate when subscribed
     LaunchedEffect(subscriptionState) {
@@ -86,12 +92,12 @@ fun PaywallScreen(
             Spacer(modifier = Modifier.height(32.dp))
             
             Text(
-                text = "7-day free trial, then \$9.99/year",
+                text = "7-day free trial, then £9.99/year",
                 style = MaterialTheme.typography.titleMedium
             )
-            
+
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             Button(
                 onClick = {
                     scope.launch {
@@ -105,21 +111,14 @@ fun PaywallScreen(
             ) {
                 Text("Start Free Trial")
             }
-            
+
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             OutlinedButton(
                 onClick = onRestore,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Restore Purchases")
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Skip for testing (remove in production)
-            TextButton(onClick = onSkip) {
-                Text("Skip (Debug)")
             }
         }
     }

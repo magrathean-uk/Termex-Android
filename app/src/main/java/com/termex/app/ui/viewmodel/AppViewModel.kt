@@ -17,10 +17,13 @@ class AppViewModel @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val subscriptionManager: SubscriptionManager
 ) : ViewModel() {
-    
+
     val hasCompletedOnboarding: StateFlow<Boolean> = userPreferencesRepository.hasCompletedOnboarding
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    
+
+    val demoModeEnabled: StateFlow<Boolean> = userPreferencesRepository.demoModeEnabledFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     val subscriptionState: StateFlow<SubscriptionState> = subscriptionManager.subscriptionState
     
     init {
@@ -33,7 +36,13 @@ class AppViewModel @Inject constructor(
             userPreferencesRepository.completeOnboarding()
         }
     }
-    
+
+    fun enableDemoMode() {
+        viewModelScope.launch {
+            userPreferencesRepository.setDemoModeEnabled(true)
+        }
+    }
+
     fun refreshSubscription() {
         subscriptionManager.querySubscriptionStatus()
     }

@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
+import com.termex.app.data.local.KnownHostDao
 import com.termex.app.data.local.ServerDao
 import com.termex.app.data.local.SnippetDao
 import com.termex.app.data.local.TermexDatabase
@@ -21,7 +22,7 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
-    
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): TermexDatabase {
@@ -29,24 +30,31 @@ object AppModule {
             context,
             TermexDatabase::class.java,
             "termex-database"
-        ).build()
+        )
+            .addMigrations(*TermexDatabase.ALL_MIGRATIONS)
+            .build()
     }
-    
+
     @Provides
     fun provideServerDao(database: TermexDatabase): ServerDao {
         return database.serverDao()
     }
-    
+
     @Provides
     fun provideSnippetDao(database: TermexDatabase): SnippetDao {
         return database.snippetDao()
     }
-    
+
     @Provides
     fun provideWorkplaceDao(database: TermexDatabase): WorkplaceDao {
         return database.workplaceDao()
     }
-    
+
+    @Provides
+    fun provideKnownHostDao(database: TermexDatabase): KnownHostDao {
+        return database.knownHostDao()
+    }
+
     @Provides
     @Singleton
     fun provideDataStore(@ApplicationContext context: Context): DataStore<Preferences> {

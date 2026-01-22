@@ -3,10 +3,17 @@ package com.termex.app.data.local
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [ServerEntity::class, WorkplaceEntity::class, SnippetEntity::class],
-    version = 1,
+    entities = [
+        ServerEntity::class,
+        WorkplaceEntity::class,
+        SnippetEntity::class,
+        KnownHostEntity::class
+    ],
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -14,4 +21,54 @@ abstract class TermexDatabase : RoomDatabase() {
     abstract fun serverDao(): ServerDao
     abstract fun workplaceDao(): WorkplaceDao
     abstract fun snippetDao(): SnippetDao
+    abstract fun knownHostDao(): KnownHostDao
+
+    companion object {
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS known_hosts (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        hostname TEXT NOT NULL,
+                        port INTEGER NOT NULL,
+                        keyType TEXT NOT NULL,
+                        fingerprint TEXT NOT NULL,
+                        publicKey TEXT NOT NULL,
+                        addedAt INTEGER NOT NULL,
+                        lastSeenAt INTEGER NOT NULL
+                    )
+                """)
+                db.execSQL("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS index_known_hosts_hostname_port
+                    ON known_hosts (hostname, port)
+                """)
+            }
+        }
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE servers ADD COLUMN portForwardsData TEXT DEFAULT NULL")
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE servers ADD COLUMN jumpHostId TEXT DEFAULT NULL")
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE servers ADD COLUMN forwardAgent INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE servers ADD COLUMN isDemo INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+    }
 }

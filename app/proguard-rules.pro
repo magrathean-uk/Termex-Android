@@ -12,9 +12,23 @@
     @androidx.room.* <methods>;
 }
 
-# Keep JSch
--keep class com.jcraft.jsch.** { *; }
--dontwarn com.jcraft.jsch.**
+# Keep SSHJ
+-keep class net.schmizz.sshj.** { *; }
+-keep class com.hierynomus.** { *; }
+-dontwarn net.schmizz.sshj.**
+-dontwarn com.hierynomus.**
+
+# Keep BouncyCastle
+-keep class org.bouncycastle.** { *; }
+-dontwarn org.bouncycastle.**
+
+# Keep EdDSA
+-keep class net.i2p.crypto.eddsa.** { *; }
+-dontwarn net.i2p.crypto.eddsa.**
+
+# Suppress sun.security warnings
+-dontwarn sun.security.x509.X509Key
+-dontwarn sun.security.**
 
 # Keep Billing
 -keep class com.android.billingclient.** { *; }

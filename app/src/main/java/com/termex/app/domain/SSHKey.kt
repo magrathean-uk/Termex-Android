@@ -7,5 +7,6 @@ data class SSHKey(
     val path: String,
     val publicKey: String = "",
     val type: String = "RSA",
+    val fingerprint: String = "",
     val lastModified: Date = Date()
 )

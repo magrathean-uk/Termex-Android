@@ -1,11 +1,15 @@
 package com.termex.app.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -16,6 +20,9 @@ import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -105,16 +112,28 @@ fun MainTabs(
             startDestination = Route.Servers.route,
             modifier = Modifier.padding(padding)
         ) {
-            composable(Route.Servers.route) { 
+            composable(Route.Servers.route) {
                 ServerListScreen(
                     onServerClick = { server ->
                         rootNavController.navigate(Route.Terminal.createRoute(server.id))
+                    },
+                    onAddServer = {
+                        rootNavController.navigate(Route.ServerSettings.createRoute(null))
+                    },
+                    onEditServer = { server ->
+                        rootNavController.navigate(Route.ServerSettings.createRoute(server.id))
                     }
                 )
             }
             composable(Route.Keys.route) { KeyListScreen() }
             composable(Route.Snippets.route) { SnippetListScreen() }
-            composable(Route.Settings.route) { SettingsScreen() }
+            composable(Route.Settings.route) {
+                SettingsScreen(
+                    onNavigateToWorkplaces = {
+                        rootNavController.navigate(Route.Workplaces.route)
+                    }
+                )
+            }
         }
     }
 }
@@ -123,12 +142,13 @@ fun MainTabs(
 @Composable
 fun ServerListScreen(
     onServerClick: (Server) -> Unit,
+    onAddServer: () -> Unit,
+    onEditServer: (Server) -> Unit,
     viewModel: ServersViewModel = hiltViewModel()
 ) {
     val servers by viewModel.servers.collectAsState()
-    val showDialog by viewModel.showAddEditDialog.collectAsState()
-    val formState by viewModel.formState.collectAsState()
-    
+    val demoModeEnabled by viewModel.demoModeEnabled.collectAsState()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -136,56 +156,101 @@ fun ServerListScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { viewModel.showAddDialog() }) {
+            FloatingActionButton(onClick = onAddServer) {
                 Icon(Icons.Default.Add, contentDescription = "Add Server")
             }
         }
     ) { padding ->
-        if (servers.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("No servers. Tap + to add one.")
+        Column(modifier = Modifier.padding(padding)) {
+            // Demo Mode Warning Banner
+            if (demoModeEnabled) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFFF9800))
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = "DEMO MODE ACTIVE",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Real server connections are disabled. For App Store review only.",
+                            color = Color.White.copy(alpha = 0.9f)
+                        )
+                    }
+                }
             }
-        } else {
-            LazyColumn(modifier = Modifier.padding(padding)) {
+
+            if (servers.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("No servers. Tap + to add one.")
+                }
+            } else {
+                LazyColumn(modifier = Modifier.weight(1f)) {
                 items(servers, key = { it.id }) { server ->
                     var showMenu by remember { mutableStateOf(false) }
-                    
+
                     ListItem(
-                        headlineContent = { Text(server.displayName) },
-                        supportingContent = { Text("${server.username}@${server.hostname}:${server.port}") },
+                        headlineContent = {
+                            if (server.isDemo) {
+                                Text("${server.displayName} (Demo)")
+                            } else {
+                                Text(server.displayName)
+                            }
+                        },
+                        supportingContent = {
+                            if (server.isDemo) {
+                                Text("Try Termex without a real server")
+                            } else {
+                                Text("${server.username}@${server.hostname}:${server.port}")
+                            }
+                        },
                         modifier = Modifier.clickable { onServerClick(server) },
                         trailingContent = {
-                            Box {
-                                Icon(
-                                    Icons.Default.Edit,
-                                    contentDescription = "More",
-                                    modifier = Modifier.clickable { showMenu = true }
-                                )
-                                DropdownMenu(
-                                    expanded = showMenu,
-                                    onDismissRequest = { showMenu = false }
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Edit") },
-                                        onClick = {
-                                            showMenu = false
-                                            viewModel.showEditDialog(server)
-                                        },
-                                        leadingIcon = { Icon(Icons.Default.Edit, null) }
+                            // Don't show edit/delete for demo server
+                            if (!server.isDemo) {
+                                Box {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "More",
+                                        modifier = Modifier.clickable { showMenu = true }
                                     )
-                                    DropdownMenuItem(
-                                        text = { Text("Delete") },
-                                        onClick = {
-                                            showMenu = false
-                                            viewModel.deleteServer(server)
-                                        },
-                                        leadingIcon = { Icon(Icons.Default.Delete, null) }
-                                    )
+                                    DropdownMenu(
+                                        expanded = showMenu,
+                                        onDismissRequest = { showMenu = false }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("Edit") },
+                                            onClick = {
+                                                showMenu = false
+                                                onEditServer(server)
+                                            },
+                                            leadingIcon = { Icon(Icons.Default.Edit, null) }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Delete") },
+                                            onClick = {
+                                                showMenu = false
+                                                viewModel.deleteServer(server)
+                                            },
+                                            leadingIcon = { Icon(Icons.Default.Delete, null) }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -193,62 +258,8 @@ fun ServerListScreen(
                     HorizontalDivider()
                 }
             }
-        }
-    }
-    
-    // Add/Edit Dialog
-    if (showDialog) {
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissDialog() },
-            title = { Text(if (formState.isEditing) "Edit Server" else "Add Server") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = formState.name,
-                        onValueChange = { viewModel.updateFormName(it) },
-                        label = { Text("Name (optional)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = formState.hostname,
-                        onValueChange = { viewModel.updateFormHostname(it) },
-                        label = { Text("Hostname") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp)
-                    )
-                    OutlinedTextField(
-                        value = formState.port,
-                        onValueChange = { viewModel.updateFormPort(it) },
-                        label = { Text("Port") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp)
-                    )
-                    OutlinedTextField(
-                        value = formState.username,
-                        onValueChange = { viewModel.updateFormUsername(it) },
-                        label = { Text("Username") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp)
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = { viewModel.saveServer() },
-                    enabled = formState.hostname.isNotBlank() && formState.username.isNotBlank()
-                ) {
-                    Text("Save")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.dismissDialog() }) {
-                    Text("Cancel")
-                }
             }
-        )
+        }
     }
 }
 
@@ -308,7 +319,19 @@ fun KeyListScreen(
                 items(keys, key = { it.name }) { key ->
                     ListItem(
                         headlineContent = { Text(key.name) },
-                        supportingContent = { Text(key.type) },
+                        supportingContent = {
+                            Column {
+                                Text(key.type)
+                                if (key.fingerprint.isNotEmpty()) {
+                                    Text(
+                                        text = key.fingerprint,
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                        maxLines = 1,
+                                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        },
                         trailingContent = {
                             androidx.compose.material3.IconButton(
                                 onClick = { viewModel.deleteKey(key) }
@@ -496,11 +519,20 @@ fun SnippetListScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    onNavigateToWorkplaces: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val themeMode by viewModel.themeMode.collectAsState()
     val terminalSettings by viewModel.terminalSettings.collectAsState()
-    
+    val keepAliveInterval by viewModel.keepAliveInterval.collectAsState()
+    val demoModeEnabled by viewModel.demoModeEnabled.collectAsState()
+
+    var showKeepAliveMenu by remember { mutableStateOf(false) }
+    var showColorSchemeMenu by remember { mutableStateOf(false) }
+    var showFontMenu by remember { mutableStateOf(false) }
+    var showFontSizeMenu by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(title = { Text("Settings") })
@@ -516,7 +548,6 @@ fun SettingsScreen(
                     headlineContent = { Text("Theme") },
                     supportingContent = { Text(themeMode.label) },
                     modifier = Modifier.clickable {
-                        // Cycle through themes
                         val next = when (themeMode) {
                             com.termex.app.data.prefs.ThemeMode.AUTO -> com.termex.app.data.prefs.ThemeMode.LIGHT
                             com.termex.app.data.prefs.ThemeMode.LIGHT -> com.termex.app.data.prefs.ThemeMode.DARK
@@ -527,15 +558,116 @@ fun SettingsScreen(
                 )
                 HorizontalDivider()
             }
-            
+
             item {
                 ListItem(
-                    headlineContent = { Text("Font Size") },
-                    supportingContent = { Text("${terminalSettings.fontSize}pt") }
+                    headlineContent = { Text("Workplaces") },
+                    supportingContent = { Text("Manage server groups for multi-terminal") },
+                    modifier = Modifier.clickable { onNavigateToWorkplaces() }
                 )
                 HorizontalDivider()
             }
-            
+
+            item {
+                Box {
+                    ListItem(
+                        headlineContent = { Text("Color Scheme") },
+                        supportingContent = { Text(terminalSettings.colorScheme) },
+                        modifier = Modifier.clickable { showColorSchemeMenu = true }
+                    )
+                    DropdownMenu(
+                        expanded = showColorSchemeMenu,
+                        onDismissRequest = { showColorSchemeMenu = false }
+                    ) {
+                        com.termex.app.ui.theme.TerminalColorScheme.entries.forEach { scheme ->
+                            DropdownMenuItem(
+                                text = { Text(scheme.displayName) },
+                                onClick = {
+                                    viewModel.setColorScheme(scheme.displayName)
+                                    showColorSchemeMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+                HorizontalDivider()
+            }
+
+            item {
+                Box {
+                    ListItem(
+                        headlineContent = { Text("Font") },
+                        supportingContent = { Text(terminalSettings.fontFamily) },
+                        modifier = Modifier.clickable { showFontMenu = true }
+                    )
+                    DropdownMenu(
+                        expanded = showFontMenu,
+                        onDismissRequest = { showFontMenu = false }
+                    ) {
+                        com.termex.app.ui.theme.TerminalFont.entries.forEach { font ->
+                            DropdownMenuItem(
+                                text = { Text(font.displayName) },
+                                onClick = {
+                                    viewModel.setFontFamily(font.displayName)
+                                    showFontMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+                HorizontalDivider()
+            }
+
+            item {
+                Box {
+                    ListItem(
+                        headlineContent = { Text("Font Size") },
+                        supportingContent = { Text("${terminalSettings.fontSize}pt") },
+                        modifier = Modifier.clickable { showFontSizeMenu = true }
+                    )
+                    DropdownMenu(
+                        expanded = showFontSizeMenu,
+                        onDismissRequest = { showFontSizeMenu = false }
+                    ) {
+                        listOf(10, 12, 14, 16, 18, 20, 24).forEach { size ->
+                            DropdownMenuItem(
+                                text = { Text("${size}pt") },
+                                onClick = {
+                                    viewModel.setFontSize(size)
+                                    showFontSizeMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+                HorizontalDivider()
+            }
+
+            item {
+                Box {
+                    ListItem(
+                        headlineContent = { Text("Keep-Alive Interval") },
+                        supportingContent = { Text(keepAliveInterval.label) },
+                        modifier = Modifier.clickable { showKeepAliveMenu = true }
+                    )
+                    DropdownMenu(
+                        expanded = showKeepAliveMenu,
+                        onDismissRequest = { showKeepAliveMenu = false }
+                    ) {
+                        com.termex.app.data.prefs.KeepAliveInterval.entries.forEach { interval ->
+                            DropdownMenuItem(
+                                text = { Text(interval.label) },
+                                onClick = {
+                                    viewModel.setKeepAliveInterval(interval)
+                                    showKeepAliveMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+                HorizontalDivider()
+            }
+
             item {
                 ListItem(
                     headlineContent = { Text("Restore Purchases") },
@@ -543,13 +675,48 @@ fun SettingsScreen(
                 )
                 HorizontalDivider()
             }
-            
+
+            item {
+                ListItem(
+                    headlineContent = { Text("Reset App") },
+                    supportingContent = { Text("Show onboarding again") },
+                    modifier = Modifier.clickable { showResetDialog = true }
+                )
+                HorizontalDivider()
+            }
+
             item {
                 ListItem(
                     headlineContent = { Text("Version") },
-                    supportingContent = { Text("1.0.0") }
+                    supportingContent = {
+                        Text(if (demoModeEnabled) "1.0.0 (Demo)" else "1.0.0")
+                    },
+                    modifier = Modifier.clickable { viewModel.onVersionTap() }
                 )
             }
         }
+    }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("Reset App") },
+            text = { Text("This will reset the app and show the onboarding screen again. Your servers and data will be preserved.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.resetApp()
+                        showResetDialog = false
+                    }
+                ) {
+                    Text("Reset")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

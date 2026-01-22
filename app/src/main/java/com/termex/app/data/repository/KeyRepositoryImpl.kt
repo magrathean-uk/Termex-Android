@@ -1,6 +1,7 @@
 package com.termex.app.data.repository
 
 import android.content.Context
+import com.termex.app.core.ssh.KeyUtils
 import com.termex.app.domain.KeyRepository
 import com.termex.app.domain.SSHKey
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -29,7 +30,7 @@ class KeyRepositoryImpl @Inject constructor(
     private val keysDir: File by lazy {
         File(context.filesDir, "ssh_keys").apply { mkdirs() }
     }
-    
+
     private val refreshTrigger = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(replay = 1)
 
     init {
@@ -44,12 +45,25 @@ class KeyRepositoryImpl @Inject constructor(
                 val keys = files.map { file ->
                     val pubKeyFile = File(keysDir, "${file.name}.pub")
                     val pubKeyContent = if (pubKeyFile.exists()) pubKeyFile.readText().trim() else ""
-                    
+
+                    val keyType = if (pubKeyContent.isNotEmpty()) {
+                        KeyUtils.getKeyTypeFromOpenSSH(pubKeyContent)
+                    } else {
+                        "UNKNOWN"
+                    }
+
+                    val fingerprint = if (pubKeyContent.isNotEmpty()) {
+                        KeyUtils.calculateFingerprintFromOpenSSH(pubKeyContent) ?: ""
+                    } else {
+                        ""
+                    }
+
                     SSHKey(
                         name = file.name,
                         path = file.absolutePath,
                         publicKey = pubKeyContent,
-                        type = if (pubKeyContent.startsWith("ssh-rsa")) "RSA" else "UNKNOWN",
+                        type = keyType,
+                        fingerprint = fingerprint,
                         lastModified = Date(file.lastModified())
                     )
                 }.sortedBy { it.name }

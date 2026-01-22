@@ -31,6 +31,9 @@ fun TerminalView(
     cursorPosition: Pair<Int, Int>,
     modifier: Modifier = Modifier,
     fontSize: Float = 14f,
+    backgroundColor: Color = Color(0xFF000000),
+    foregroundColor: Color = Color(0xFFE5E5E5),
+    cursorColor: Color = Color(0xFFE5E5E5),
     onTap: () -> Unit = {}
 ) {
     val density = LocalDensity.current
@@ -60,7 +63,7 @@ fun TerminalView(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF000000))
+            .background(backgroundColor)
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = { onTap() }

@@ -12,9 +12,12 @@ import androidx.navigation.navArgument
 import com.termex.app.core.billing.SubscriptionState
 import com.termex.app.ui.navigation.Route
 import com.termex.app.ui.screens.MainTabs
+import com.termex.app.ui.screens.MultiTerminalScreen
 import com.termex.app.ui.screens.OnboardingFlow
 import com.termex.app.ui.screens.PaywallScreen
+import com.termex.app.ui.screens.ServerSettingsScreen
 import com.termex.app.ui.screens.TerminalScreen
+import com.termex.app.ui.screens.WorkplacesScreen
 import com.termex.app.ui.viewmodel.AppViewModel
 
 @Composable
@@ -23,14 +26,18 @@ fun TermexApp(
 ) {
     val hasCompletedOnboarding by viewModel.hasCompletedOnboarding.collectAsState()
     val subscriptionState by viewModel.subscriptionState.collectAsState()
-    
+    val demoModeEnabled by viewModel.demoModeEnabled.collectAsState()
+
     val navController = rememberNavController()
-    
+
     // Determine start destination
+    // Demo mode users bypass the paywall
+    // Show paywall unless actively subscribed (LOADING, ERROR, NOT_SUBSCRIBED all show paywall)
     val startDestination = when {
         !hasCompletedOnboarding -> Route.Onboarding.route
-        subscriptionState is SubscriptionState.NOT_SUBSCRIBED -> Route.Paywall.route
-        else -> Route.Main.route
+        demoModeEnabled -> Route.Main.route
+        subscriptionState is SubscriptionState.SUBSCRIBED -> Route.Main.route
+        else -> Route.Paywall.route  // NOT_SUBSCRIBED, LOADING, ERROR all show paywall
     }
     
     NavHost(
@@ -41,9 +48,18 @@ fun TermexApp(
             OnboardingFlow(
                 onComplete = {
                     viewModel.completeOnboarding()
-                    navController.navigate(Route.Paywall.route) {
+                    // Navigate to main only if demo mode or subscribed, otherwise to paywall
+                    val destination = when {
+                        demoModeEnabled -> Route.Main.route
+                        subscriptionState is SubscriptionState.SUBSCRIBED -> Route.Main.route
+                        else -> Route.Paywall.route
+                    }
+                    navController.navigate(destination) {
                         popUpTo(Route.Onboarding.route) { inclusive = true }
                     }
+                },
+                onEnableDemoMode = {
+                    viewModel.enableDemoMode()
                 }
             )
         }
@@ -58,12 +74,6 @@ fun TermexApp(
                 },
                 onRestore = {
                     viewModel.refreshSubscription()
-                },
-                onSkip = {
-                    // For testing: skip paywall
-                    navController.navigate(Route.Main.route) {
-                        popUpTo(Route.Paywall.route) { inclusive = true }
-                    }
                 }
             )
         }
@@ -80,6 +90,41 @@ fun TermexApp(
             TerminalScreen(
                 serverId = serverId,
                 onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Route.ServerSettings.route,
+            arguments = listOf(navArgument("serverId") {
+                type = NavType.StringType
+                nullable = true
+                defaultValue = null
+            })
+        ) { backStackEntry ->
+            val serverId = backStackEntry.arguments?.getString("serverId")
+            ServerSettingsScreen(
+                serverId = serverId,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Route.MultiTerminal.route,
+            arguments = listOf(navArgument("workplaceId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val workplaceId = backStackEntry.arguments?.getString("workplaceId") ?: return@composable
+            MultiTerminalScreen(
+                workplaceId = workplaceId,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Route.Workplaces.route) {
+            WorkplacesScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onOpenMultiTerminal = { workplaceId ->
+                    navController.navigate(Route.MultiTerminal.createRoute(workplaceId))
+                }
             )
         }
     }

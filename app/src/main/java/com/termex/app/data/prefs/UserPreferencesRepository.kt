@@ -2,6 +2,7 @@ package com.termex.app.data.prefs
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -10,17 +11,13 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-enum class ThemeMode(val raw: String, val label: String) {
-    AUTO("auto", "Auto"),
-    LIGHT("light", "Light"),
-    DARK("dark", "Dark")
+enum class KeepAliveInterval(val seconds: Int, val label: String) {
+    SECONDS_15(15, "15 seconds"),
+    SECONDS_30(30, "30 seconds"),
+    SECONDS_60(60, "60 seconds"),
+    SECONDS_120(120, "120 seconds"),
+    DISABLED(0, "Disabled")
 }
-
-data class TerminalSettings(
-    val fontSize: Int = 14,
-    val fontFamily: String = "Monospace",
-    val colorScheme: String = "Default"
-)
 
 @Singleton
 class UserPreferencesRepository @Inject constructor(
@@ -32,6 +29,8 @@ class UserPreferencesRepository @Inject constructor(
         private val KEY_FONT_FAMILY = stringPreferencesKey("font_family")
         private val KEY_COLOR_SCHEME = stringPreferencesKey("color_scheme")
         private val KEY_ONBOARDING_COMPLETE = stringPreferencesKey("onboarding_complete")
+        private val KEY_KEEP_ALIVE_INTERVAL = intPreferencesKey("keep_alive_interval")
+        private val KEY_DEMO_MODE_ENABLED = booleanPreferencesKey("demo_mode_enabled")
     }
 
     val themeFlow: Flow<ThemeMode> = dataStore.data.map { prefs ->
@@ -52,6 +51,15 @@ class UserPreferencesRepository @Inject constructor(
         prefs[KEY_ONBOARDING_COMPLETE] == "true"
     }
 
+    val keepAliveIntervalFlow: Flow<KeepAliveInterval> = dataStore.data.map { prefs ->
+        val seconds = prefs[KEY_KEEP_ALIVE_INTERVAL] ?: 30
+        KeepAliveInterval.entries.firstOrNull { it.seconds == seconds } ?: KeepAliveInterval.SECONDS_30
+    }
+
+    val demoModeEnabledFlow: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_DEMO_MODE_ENABLED] ?: false
+    }
+
     suspend fun setThemeMode(mode: ThemeMode) {
         dataStore.edit { prefs ->
             prefs[KEY_THEME_MODE] = mode.raw
@@ -65,13 +73,25 @@ class UserPreferencesRepository @Inject constructor(
             prefs[KEY_COLOR_SCHEME] = settings.colorScheme
         }
     }
-    
+
+    suspend fun setKeepAliveInterval(interval: KeepAliveInterval) {
+        dataStore.edit { prefs ->
+            prefs[KEY_KEEP_ALIVE_INTERVAL] = interval.seconds
+        }
+    }
+
+    suspend fun setDemoModeEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[KEY_DEMO_MODE_ENABLED] = enabled
+        }
+    }
+
     suspend fun completeOnboarding() {
         dataStore.edit { prefs ->
             prefs[KEY_ONBOARDING_COMPLETE] = "true"
         }
     }
-    
+
     suspend fun resetOnboarding() {
         dataStore.edit { prefs ->
             prefs[KEY_ONBOARDING_COMPLETE] = "false"

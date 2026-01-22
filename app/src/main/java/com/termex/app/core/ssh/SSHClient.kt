@@ -7,7 +7,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import net.schmizz.sshj.SSHClient as SshjClient
 import net.schmizz.sshj.connection.channel.direct.Session
-import net.schmizz.sshj.transport.verification.PromiscuousVerifier
 import net.schmizz.sshj.userauth.keyprovider.KeyProvider
 import net.schmizz.sshj.connection.channel.direct.PTYMode
 import org.bouncycastle.jce.provider.BouncyCastleProvider
@@ -23,6 +22,7 @@ sealed class SSHConnectionState {
     data object Connecting : SSHConnectionState()
     data object Connected : SSHConnectionState()
     data class Error(val message: String) : SSHConnectionState()
+    data class VerifyingHostKey(val result: HostKeyVerificationResult) : SSHConnectionState()
 }
 
 data class SSHConnectionConfig(
@@ -31,7 +31,8 @@ data class SSHConnectionConfig(
     val username: String,
     val password: String? = null,
     val privateKey: ByteArray? = null,
-    val privateKeyPassphrase: String? = null
+    val privateKeyPassphrase: String? = null,
+    val keepAliveIntervalSeconds: Int = 30
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -42,7 +43,8 @@ data class SSHConnectionConfig(
                 username == other.username &&
                 password == other.password &&
                 privateKey.contentEquals(other.privateKey) &&
-                privateKeyPassphrase == other.privateKeyPassphrase
+                privateKeyPassphrase == other.privateKeyPassphrase &&
+                keepAliveIntervalSeconds == other.keepAliveIntervalSeconds
     }
 
     override fun hashCode(): Int {
@@ -52,12 +54,15 @@ data class SSHConnectionConfig(
         result = 31 * result + (password?.hashCode() ?: 0)
         result = 31 * result + (privateKey?.contentHashCode() ?: 0)
         result = 31 * result + (privateKeyPassphrase?.hashCode() ?: 0)
+        result = 31 * result + keepAliveIntervalSeconds
         return result
     }
 }
 
 @Singleton
-class SSHClient @Inject constructor() {
+class SSHClient @Inject constructor(
+    private val hostKeyVerifier: TermexHostKeyVerifier
+) {
 
     init {
         // Android ships with a stripped-down functionality Bouncy Castle provider
@@ -69,29 +74,38 @@ class SSHClient @Inject constructor() {
     private var sshClient: SshjClient? = null
     private var session: Session? = null
     private var shell: Session.Shell? = null
-    
+
     private val _connectionState = MutableStateFlow<SSHConnectionState>(SSHConnectionState.Disconnected)
     val connectionState: StateFlow<SSHConnectionState> = _connectionState.asStateFlow()
-    
+
     var inputStream: InputStream? = null
         private set
     var outputStream: OutputStream? = null
         private set
-    
+
+    fun setHostKeyVerificationCallback(callback: HostKeyVerificationCallback?) {
+        hostKeyVerifier.setCallback(callback)
+    }
+
     suspend fun connect(config: SSHConnectionConfig): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             disconnect() // Ensure fresh start
             _connectionState.value = SSHConnectionState.Connecting
-            
+
             val client = SshjClient()
             sshClient = client
-            
-            // For now, accept all host keys (equivalent to StrictHostKeyChecking=no)
-            client.addHostKeyVerifier(PromiscuousVerifier())
+
+            // Use proper host key verification
+            client.addHostKeyVerifier(hostKeyVerifier)
             
             // Connect
             client.connect(config.hostname, config.port)
-            
+
+            // Configure keep-alive
+            if (config.keepAliveIntervalSeconds > 0) {
+                client.connection.keepAlive.keepAliveInterval = config.keepAliveIntervalSeconds
+            }
+
             // Auth
             if (config.privateKey != null) {
                 // Write key to temp file because SSHJ loadKeys expects file path
