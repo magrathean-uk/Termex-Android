@@ -157,7 +157,7 @@ class SSHClient @Inject constructor(
             _connectionState.value = SSHConnectionState.Connected
             Result.success(Unit)
         } catch (e: Exception) {
-            e.printStackTrace()
+            // Error handled via state - no stack trace in production
             _connectionState.value = SSHConnectionState.Error(e.message ?: "Connection failed")
             disconnect() // Cleanup on failure
             Result.failure(e)

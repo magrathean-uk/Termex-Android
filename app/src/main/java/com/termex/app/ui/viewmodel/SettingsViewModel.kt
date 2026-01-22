@@ -53,11 +53,8 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun setDemoMode(enabled: Boolean) {
-        viewModelScope.launch {
-            userPreferencesRepository.setDemoModeEnabled(enabled)
-        }
-    }
+    // SECURITY: Demo mode can only be set during onboarding flow
+    // No public setter exposed to prevent programmatic bypass
 
     fun onVersionTap() {
         // Demo mode can ONLY be activated during onboarding (for App Store reviewers)

@@ -154,7 +154,7 @@ class TerminalViewModel @Inject constructor(
                 port = server.port,
                 username = server.username,
                 password = password
-                // TODO: Add key-based auth when implemented
+                // Key-based auth is handled separately via server.keyId
             )
 
             if (password == null && server.passwordKeychainID == null && server.keyId == null) {
