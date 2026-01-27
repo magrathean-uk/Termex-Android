@@ -163,11 +163,19 @@ fun TerminalScreen(
                     )
                 }
                 is SSHConnectionState.Error -> {
-                    Text(
-                        text = "Error: ${(connectionState as SSHConnectionState.Error).message}",
-                        color = Color.Red,
-                        modifier = Modifier.padding(16.dp)
-                    )
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Error: ${(connectionState as SSHConnectionState.Error).message}",
+                            color = Color.Red
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(onClick = {
+                            viewModel.disconnect()
+                            onNavigateBack()
+                        }) {
+                            Text("Close")
+                        }
+                    }
                 }
                 is SSHConnectionState.Connected -> {
                     // Terminal view

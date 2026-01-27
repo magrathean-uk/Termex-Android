@@ -137,7 +137,7 @@ class SubscriptionManager @Inject constructor(
     }
     
     fun launchSubscriptionFlow(activity: Activity, productDetails: ProductDetails) {
-        val offerToken = productDetails.subscriptionOfferDetails?.firstOrNull()?.offerToken ?: return
+        val offerToken = selectPreferredOffer(productDetails)?.offerToken ?: return
         
         val productDetailsParamsList = listOf(
             BillingFlowParams.ProductDetailsParams.newBuilder()
@@ -151,6 +151,15 @@ class SubscriptionManager @Inject constructor(
             .build()
         
         billingClient.launchBillingFlow(activity, billingFlowParams)
+    }
+
+    private fun selectPreferredOffer(
+        productDetails: ProductDetails
+    ): ProductDetails.SubscriptionOfferDetails? {
+        val offers = productDetails.subscriptionOfferDetails ?: return null
+        return offers.firstOrNull { offer ->
+            offer.pricingPhases.pricingPhaseList.any { it.priceAmountMicros == 0L }
+        } ?: offers.firstOrNull()
     }
     
     private fun handlePurchase(billingResult: BillingResult, purchases: List<Purchase>?) {

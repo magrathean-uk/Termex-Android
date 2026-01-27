@@ -44,6 +44,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("boolean", "BYPASS_PAYWALL", "false")
+        }
+
         release {
             isMinifyEnabled = true
             signingConfig = signingConfigs.getByName("release")
@@ -51,6 +55,15 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            buildConfigField("boolean", "BYPASS_PAYWALL", "false")
+        }
+
+        create("dev") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            buildConfigField("boolean", "BYPASS_PAYWALL", "true")
+            matchingFallbacks += listOf("debug")
         }
     }
     compileOptions {

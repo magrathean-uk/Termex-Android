@@ -7,6 +7,7 @@ import com.termex.app.core.ssh.SSHClient
 import com.termex.app.core.ssh.SSHConnectionConfig
 import com.termex.app.core.ssh.SSHConnectionState
 import com.termex.app.core.ssh.TerminalBuffer
+import com.termex.app.domain.AuthMode
 import com.termex.app.domain.Server
 import com.termex.app.domain.WorkplaceRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Provider
 
@@ -67,15 +69,58 @@ class MultiTerminalViewModel @Inject constructor(
 
             updatePaneState(server.id) { it.copy(connectionState = SSHConnectionState.Connecting) }
 
-            // Use provided password, or fall back to saved password
-            val effectivePassword = password ?: server.passwordKeychainID
+            val savedPassword = server.passwordKeychainID?.takeIf { it.isNotBlank() }
+            val effectivePassword = password?.takeIf { it.isNotBlank() } ?: savedPassword
 
-            val config = SSHConnectionConfig(
-                hostname = server.hostname,
-                port = server.port,
-                username = server.username,
-                password = effectivePassword
-            )
+            val keyPath = server.keyId?.takeIf { it.isNotBlank() }
+            val privateKeyBytes = keyPath?.let { path ->
+                val keyFile = File(path)
+                if (keyFile.exists()) keyFile.readBytes() else null
+            }
+
+            val config = when (server.authMode) {
+                AuthMode.KEY -> {
+                    if (privateKeyBytes != null) {
+                        SSHConnectionConfig(
+                            hostname = server.hostname,
+                            port = server.port,
+                            username = server.username,
+                            privateKey = privateKeyBytes
+                        )
+                    } else {
+                        SSHConnectionConfig(
+                            hostname = server.hostname,
+                            port = server.port,
+                            username = server.username,
+                            password = effectivePassword
+                        )
+                    }
+                }
+                AuthMode.PASSWORD -> {
+                    if (effectivePassword != null) {
+                        SSHConnectionConfig(
+                            hostname = server.hostname,
+                            port = server.port,
+                            username = server.username,
+                            password = effectivePassword
+                        )
+                    } else {
+                        SSHConnectionConfig(
+                            hostname = server.hostname,
+                            port = server.port,
+                            username = server.username,
+                            privateKey = privateKeyBytes
+                        )
+                    }
+                }
+                AuthMode.AUTO -> SSHConnectionConfig(
+                    hostname = server.hostname,
+                    port = server.port,
+                    username = server.username,
+                    privateKey = privateKeyBytes,
+                    password = effectivePassword
+                )
+            }
 
             val result = client.connect(config)
 

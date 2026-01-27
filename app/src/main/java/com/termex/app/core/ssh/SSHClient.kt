@@ -158,8 +158,8 @@ class SSHClient @Inject constructor(
             Result.success(Unit)
         } catch (e: Exception) {
             // Error handled via state - no stack trace in production
+            cleanupConnection() // Cleanup without overwriting error state
             _connectionState.value = SSHConnectionState.Error(e.message ?: "Connection failed")
-            disconnect() // Cleanup on failure
             Result.failure(e)
         }
     }
@@ -186,7 +186,7 @@ class SSHClient @Inject constructor(
     
     suspend fun sendData(data: String) = sendData(data.toByteArray())
     
-    fun disconnect() {
+    private fun cleanupConnection() {
         try {
             shell?.close()
             session?.close()
@@ -199,8 +199,12 @@ class SSHClient @Inject constructor(
             sshClient = null
             inputStream = null
             outputStream = null
-            _connectionState.value = SSHConnectionState.Disconnected
         }
+    }
+
+    fun disconnect() {
+        cleanupConnection()
+        _connectionState.value = SSHConnectionState.Disconnected
     }
     
     fun isConnected(): Boolean = sshClient?.isConnected == true && session?.isOpen == true

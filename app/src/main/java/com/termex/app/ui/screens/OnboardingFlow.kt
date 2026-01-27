@@ -2,6 +2,7 @@ package com.termex.app.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -9,11 +10,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,12 +22,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import com.termex.app.R
 import kotlinx.coroutines.launch
 
 data class OnboardingPage(
-    val icon: ImageVector,
+    val icon: ImageVector? = null,
+    val iconResId: Int? = null,
     val title: String,
     val description: String,
     val isFirstPage: Boolean = false
@@ -34,7 +39,7 @@ data class OnboardingPage(
 
 private val onboardingPages = listOf(
     OnboardingPage(
-        icon = Icons.Default.Terminal,
+        iconResId = R.mipmap.ic_launcher,
         title = "Welcome to Termex",
         description = "A powerful SSH terminal client for Android. Connect to your servers securely from anywhere.",
         isFirstPage = true
@@ -59,7 +64,7 @@ private val onboardingPages = listOf(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingFlow(
-    onComplete: () -> Unit,
+    onComplete: (demoModeActivated: Boolean) -> Unit,
     onEnableDemoMode: () -> Unit = {}
 ) {
     val pagerState = rememberPagerState(pageCount = { onboardingPages.size })
@@ -150,7 +155,7 @@ fun OnboardingFlow(
                 Button(
                     onClick = {
                         if (pagerState.currentPage == onboardingPages.lastIndex) {
-                            onComplete()
+                            onComplete(demoModeActivated)
                         } else {
                             coroutineScope.launch {
                                 pagerState.animateScrollToPage(pagerState.currentPage + 1)
@@ -179,21 +184,35 @@ private fun OnboardingPageContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(
-            imageVector = page.icon,
-            contentDescription = null,
-            modifier = Modifier
-                .size(120.dp)
-                .then(
-                    if (onLogoTap != null) {
-                        Modifier.clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) { onLogoTap() }
-                    } else Modifier
-                ),
-            tint = MaterialTheme.colorScheme.primary
-        )
+        val iconModifier = Modifier
+            .size(120.dp)
+            .then(
+                if (onLogoTap != null) {
+                    Modifier.clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { onLogoTap() }
+                } else Modifier
+            )
+
+        when {
+            page.iconResId != null -> {
+                Image(
+                    painter = painterResource(id = page.iconResId),
+                    contentDescription = "Termex app icon",
+                    modifier = iconModifier.clip(RoundedCornerShape(24.dp)),
+                    contentScale = ContentScale.Fit
+                )
+            }
+            page.icon != null -> {
+                Icon(
+                    imageVector = page.icon,
+                    contentDescription = null,
+                    modifier = iconModifier,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(32.dp))
 

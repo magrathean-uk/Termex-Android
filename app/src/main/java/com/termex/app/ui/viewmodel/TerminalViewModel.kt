@@ -11,6 +11,7 @@ import com.termex.app.core.ssh.SSHConnectionState
 import com.termex.app.core.ssh.TermexHostKeyVerifier
 import com.termex.app.core.ssh.TerminalBuffer
 import com.termex.app.data.prefs.UserPreferencesRepository
+import com.termex.app.domain.AuthMode
 import com.termex.app.domain.Server
 import com.termex.app.domain.ServerRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
 
 @HiltViewModel
@@ -148,20 +150,69 @@ class TerminalViewModel @Inject constructor(
                 return@launch
             }
 
-            // Build connection config
-            val config = SSHConnectionConfig(
-                hostname = server.hostname,
-                port = server.port,
-                username = server.username,
-                password = password
-                // Key-based auth is handled separately via server.keyId
-            )
+            val savedPassword = server.passwordKeychainID?.takeIf { it.isNotBlank() }
+            val effectivePassword = password?.takeIf { it.isNotBlank() } ?: savedPassword
 
-            if (password == null && server.passwordKeychainID == null && server.keyId == null) {
+            val keyPath = server.keyId?.takeIf { it.isNotBlank() }
+            val privateKeyBytes = keyPath?.let { path ->
+                val keyFile = File(path)
+                if (keyFile.exists()) keyFile.readBytes() else null
+            }
+
+            val shouldPromptPassword = effectivePassword == null && privateKeyBytes == null
+            if (shouldPromptPassword) {
                 // Need to prompt for password
-                pendingConfig = config
+                pendingConfig = SSHConnectionConfig(
+                    hostname = server.hostname,
+                    port = server.port,
+                    username = server.username
+                )
                 _needsPassword.value = true
                 return@launch
+            }
+
+            val config = when (server.authMode) {
+                AuthMode.KEY -> {
+                    if (privateKeyBytes != null) {
+                        SSHConnectionConfig(
+                            hostname = server.hostname,
+                            port = server.port,
+                            username = server.username,
+                            privateKey = privateKeyBytes
+                        )
+                    } else {
+                        SSHConnectionConfig(
+                            hostname = server.hostname,
+                            port = server.port,
+                            username = server.username,
+                            password = effectivePassword
+                        )
+                    }
+                }
+                AuthMode.PASSWORD -> {
+                    if (effectivePassword != null) {
+                        SSHConnectionConfig(
+                            hostname = server.hostname,
+                            port = server.port,
+                            username = server.username,
+                            password = effectivePassword
+                        )
+                    } else {
+                        SSHConnectionConfig(
+                            hostname = server.hostname,
+                            port = server.port,
+                            username = server.username,
+                            privateKey = privateKeyBytes
+                        )
+                    }
+                }
+                AuthMode.AUTO -> SSHConnectionConfig(
+                    hostname = server.hostname,
+                    port = server.port,
+                    username = server.username,
+                    privateKey = privateKeyBytes,
+                    password = effectivePassword
+                )
             }
 
             performConnect(config)

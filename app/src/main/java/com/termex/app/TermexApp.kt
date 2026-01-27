@@ -3,12 +3,17 @@ package com.termex.app
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.termex.app.BuildConfig
 import com.termex.app.core.billing.SubscriptionState
 import com.termex.app.ui.navigation.Route
 import com.termex.app.ui.screens.MainTabs
@@ -27,16 +32,27 @@ fun TermexApp(
     val hasCompletedOnboarding by viewModel.hasCompletedOnboarding.collectAsState()
     val subscriptionState by viewModel.subscriptionState.collectAsState()
     val demoModeEnabled by viewModel.demoModeEnabled.collectAsState()
+    var demoModeActivated by rememberSaveable { mutableStateOf(false) }
 
     val navController = rememberNavController()
+    val paywallBypassed = BuildConfig.BYPASS_PAYWALL
+    val demoModeActive = demoModeEnabled || demoModeActivated
+    val paywallRequired = !paywallBypassed &&
+        !demoModeActive &&
+        subscriptionState !is SubscriptionState.SUBSCRIBED
+
+    LaunchedEffect(demoModeEnabled) {
+        if (demoModeEnabled) {
+            demoModeActivated = false
+        }
+    }
 
     // Determine start destination
     // Demo mode users bypass the paywall
     // Show paywall unless actively subscribed (LOADING, ERROR, NOT_SUBSCRIBED all show paywall)
     val startDestination = when {
         !hasCompletedOnboarding -> Route.Onboarding.route
-        demoModeEnabled -> Route.Main.route
-        subscriptionState is SubscriptionState.SUBSCRIBED -> Route.Main.route
+        !paywallRequired -> Route.Main.route
         else -> Route.Paywall.route  // NOT_SUBSCRIBED, LOADING, ERROR all show paywall
     }
     
@@ -46,11 +62,12 @@ fun TermexApp(
     ) {
         composable(Route.Onboarding.route) {
             OnboardingFlow(
-                onComplete = {
+                onComplete = { demoModeActivated ->
                     viewModel.completeOnboarding()
                     // Navigate to main only if demo mode or subscribed, otherwise to paywall
                     val destination = when {
-                        demoModeEnabled -> Route.Main.route
+                        paywallBypassed -> Route.Main.route
+                        demoModeActivated || demoModeActive -> Route.Main.route
                         subscriptionState is SubscriptionState.SUBSCRIBED -> Route.Main.route
                         else -> Route.Paywall.route
                     }
@@ -59,6 +76,7 @@ fun TermexApp(
                     }
                 },
                 onEnableDemoMode = {
+                    demoModeActivated = true
                     viewModel.enableDemoMode()
                 }
             )
@@ -79,7 +97,13 @@ fun TermexApp(
         }
         
         composable(Route.Main.route) {
-            MainTabs(rootNavController = navController)
+            PaywallGate(
+                paywallRequired = paywallRequired,
+                onSubscribed = { viewModel.refreshSubscription() },
+                onRestore = { viewModel.refreshSubscription() }
+            ) {
+                MainTabs(rootNavController = navController)
+            }
         }
         
         composable(
@@ -87,10 +111,16 @@ fun TermexApp(
             arguments = listOf(navArgument("serverId") { type = NavType.StringType })
         ) { backStackEntry ->
             val serverId = backStackEntry.arguments?.getString("serverId") ?: return@composable
-            TerminalScreen(
-                serverId = serverId,
-                onNavigateBack = { navController.popBackStack() }
-            )
+            PaywallGate(
+                paywallRequired = paywallRequired,
+                onSubscribed = { viewModel.refreshSubscription() },
+                onRestore = { viewModel.refreshSubscription() }
+            ) {
+                TerminalScreen(
+                    serverId = serverId,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
         }
 
         composable(
@@ -102,10 +132,16 @@ fun TermexApp(
             })
         ) { backStackEntry ->
             val serverId = backStackEntry.arguments?.getString("serverId")
-            ServerSettingsScreen(
-                serverId = serverId,
-                onNavigateBack = { navController.popBackStack() }
-            )
+            PaywallGate(
+                paywallRequired = paywallRequired,
+                onSubscribed = { viewModel.refreshSubscription() },
+                onRestore = { viewModel.refreshSubscription() }
+            ) {
+                ServerSettingsScreen(
+                    serverId = serverId,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
         }
 
         composable(
@@ -113,19 +149,48 @@ fun TermexApp(
             arguments = listOf(navArgument("workplaceId") { type = NavType.StringType })
         ) { backStackEntry ->
             val workplaceId = backStackEntry.arguments?.getString("workplaceId") ?: return@composable
-            MultiTerminalScreen(
-                workplaceId = workplaceId,
-                onNavigateBack = { navController.popBackStack() }
-            )
+            PaywallGate(
+                paywallRequired = paywallRequired,
+                onSubscribed = { viewModel.refreshSubscription() },
+                onRestore = { viewModel.refreshSubscription() }
+            ) {
+                MultiTerminalScreen(
+                    workplaceId = workplaceId,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
         }
 
         composable(Route.Workplaces.route) {
-            WorkplacesScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onOpenMultiTerminal = { workplaceId ->
-                    navController.navigate(Route.MultiTerminal.createRoute(workplaceId))
-                }
-            )
+            PaywallGate(
+                paywallRequired = paywallRequired,
+                onSubscribed = { viewModel.refreshSubscription() },
+                onRestore = { viewModel.refreshSubscription() }
+            ) {
+                WorkplacesScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onOpenMultiTerminal = { workplaceId ->
+                        navController.navigate(Route.MultiTerminal.createRoute(workplaceId))
+                    }
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun PaywallGate(
+    paywallRequired: Boolean,
+    onSubscribed: () -> Unit,
+    onRestore: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    if (paywallRequired) {
+        PaywallScreen(
+            onSubscribed = onSubscribed,
+            onRestore = onRestore
+        )
+    } else {
+        content()
     }
 }
