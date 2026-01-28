@@ -78,7 +78,7 @@ android {
     }
     packaging {
         resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/{AL2.0,LGPL2.1,DEPENDENCIES}"
         }
     }
 }
@@ -130,6 +130,9 @@ dependencies {
     
     // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.10.0")
+
+    // Leak detection (debug only)
+    debugImplementation("com.squareup.leakcanary:leakcanary-android:2.14")
 
     // Testing
     testImplementation("junit:junit:4.13.2")
