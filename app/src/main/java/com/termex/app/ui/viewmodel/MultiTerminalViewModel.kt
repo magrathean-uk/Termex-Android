@@ -3,14 +3,16 @@ package com.termex.app.ui.viewmodel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.termex.app.core.ssh.HostKeyVerificationCallback
+import com.termex.app.core.ssh.HostKeyVerificationResult
 import com.termex.app.core.ssh.SSHClient
-import com.termex.app.core.ssh.SSHConnectionConfig
 import com.termex.app.core.ssh.SSHConnectionState
+import com.termex.app.core.ssh.SshConfigBuilder
 import com.termex.app.core.ssh.TerminalBuffer
-import com.termex.app.domain.AuthMode
 import com.termex.app.domain.Server
 import com.termex.app.domain.WorkplaceRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,7 +22,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.io.File
 import javax.inject.Inject
 import javax.inject.Provider
 
@@ -31,11 +32,17 @@ data class TerminalPaneState(
     val cursorPosition: Pair<Int, Int> = 0 to 0
 )
 
+data class HostKeyPrompt(
+    val serverId: String,
+    val result: HostKeyVerificationResult
+)
+
 @HiltViewModel
 class MultiTerminalViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val workplaceRepository: WorkplaceRepository,
-    private val sshClientProvider: Provider<SSHClient>
+    private val sshClientProvider: Provider<SSHClient>,
+    private val sshConfigBuilder: SshConfigBuilder
 ) : ViewModel() {
 
     private val workplaceId: String = savedStateHandle.get<String>("workplaceId") ?: ""
@@ -49,9 +56,14 @@ class MultiTerminalViewModel @Inject constructor(
     private val clients = mutableMapOf<String, SSHClient>()
     private val buffers = mutableMapOf<String, TerminalBuffer>()
     private val readJobs = mutableMapOf<String, Job>()
+    private val hostKeyDeferred = mutableMapOf<String, CompletableDeferred<Boolean>>()
+    private val pendingPrompts = ArrayDeque<HostKeyPrompt>()
 
     private val _selectedPane = MutableStateFlow<String?>(null)
     val selectedPane: StateFlow<String?> = _selectedPane.asStateFlow()
+
+    private val _hostKeyPrompt = MutableStateFlow<HostKeyPrompt?>(null)
+    val hostKeyPrompt: StateFlow<HostKeyPrompt?> = _hostKeyPrompt.asStateFlow()
 
     fun selectPane(serverId: String) {
         _selectedPane.value = serverId
@@ -69,57 +81,24 @@ class MultiTerminalViewModel @Inject constructor(
 
             updatePaneState(server.id) { it.copy(connectionState = SSHConnectionState.Connecting) }
 
-            val savedPassword = server.passwordKeychainID?.takeIf { it.isNotBlank() }
-            val effectivePassword = password?.takeIf { it.isNotBlank() } ?: savedPassword
-
-            val keyPath = server.keyId?.takeIf { it.isNotBlank() }
-            val privateKeyBytes = keyPath?.let { path ->
-                val keyFile = File(path)
-                if (keyFile.exists()) keyFile.readBytes() else null
-            }
-
-            val config = when (server.authMode) {
-                AuthMode.KEY -> {
-                    if (privateKeyBytes != null) {
-                        SSHConnectionConfig(
-                            hostname = server.hostname,
-                            port = server.port,
-                            username = server.username,
-                            privateKey = privateKeyBytes
-                        )
-                    } else {
-                        SSHConnectionConfig(
-                            hostname = server.hostname,
-                            port = server.port,
-                            username = server.username,
-                            password = effectivePassword
-                        )
+            client.setHostKeyVerificationCallback(object : HostKeyVerificationCallback {
+                override suspend fun onVerificationRequired(result: HostKeyVerificationResult): Boolean {
+                    updatePaneState(server.id) {
+                        it.copy(connectionState = SSHConnectionState.VerifyingHostKey(result))
                     }
+                    val deferred = CompletableDeferred<Boolean>()
+                    hostKeyDeferred[server.id] = deferred
+                    enqueuePrompt(HostKeyPrompt(server.id, result))
+                    return deferred.await()
                 }
-                AuthMode.PASSWORD -> {
-                    if (effectivePassword != null) {
-                        SSHConnectionConfig(
-                            hostname = server.hostname,
-                            port = server.port,
-                            username = server.username,
-                            password = effectivePassword
-                        )
-                    } else {
-                        SSHConnectionConfig(
-                            hostname = server.hostname,
-                            port = server.port,
-                            username = server.username,
-                            privateKey = privateKeyBytes
-                        )
-                    }
+            })
+
+            val config = sshConfigBuilder.buildConfig(server, password)
+            if (config == null || (config.password == null && config.privateKey == null)) {
+                updatePaneState(server.id) {
+                    it.copy(connectionState = SSHConnectionState.Error("Missing credentials"))
                 }
-                AuthMode.AUTO -> SSHConnectionConfig(
-                    hostname = server.hostname,
-                    port = server.port,
-                    username = server.username,
-                    privateKey = privateKeyBytes,
-                    password = effectivePassword
-                )
+                return@launch
             }
 
             val result = client.connect(config)
@@ -154,6 +133,9 @@ class MultiTerminalViewModel @Inject constructor(
                             )
                         }
                     } else if (bytesRead == -1) {
+                        updatePaneState(serverId) {
+                            it.copy(connectionState = SSHConnectionState.Disconnected)
+                        }
                         break
                     }
                 }
@@ -172,6 +154,9 @@ class MultiTerminalViewModel @Inject constructor(
     fun disconnectServer(serverId: String) {
         readJobs[serverId]?.cancel()
         readJobs.remove(serverId)
+        hostKeyDeferred.remove(serverId)?.complete(false)
+        clearPromptForServer(serverId)
+        clients[serverId]?.setHostKeyVerificationCallback(null)
         clients[serverId]?.disconnect()
         clients.remove(serverId)
         buffers.remove(serverId)
@@ -183,6 +168,21 @@ class MultiTerminalViewModel @Inject constructor(
 
     fun disconnectAll() {
         clients.keys.toList().forEach { disconnectServer(it) }
+    }
+
+    fun acceptHostKey() {
+        val prompt = _hostKeyPrompt.value ?: return
+        viewModelScope.launch {
+            clients[prompt.serverId]?.trustHostKey(prompt.result)
+            hostKeyDeferred.remove(prompt.serverId)?.complete(true)
+            advancePrompt()
+        }
+    }
+
+    fun rejectHostKey() {
+        val prompt = _hostKeyPrompt.value ?: return
+        hostKeyDeferred.remove(prompt.serverId)?.complete(false)
+        advancePrompt()
     }
 
     private fun updatePaneState(serverId: String, update: (TerminalPaneState) -> TerminalPaneState) {
@@ -199,6 +199,33 @@ class MultiTerminalViewModel @Inject constructor(
             server.id to TerminalPaneState(server = server)
         }
         _paneStates.value = states
+    }
+
+    private fun enqueuePrompt(prompt: HostKeyPrompt) {
+        if (_hostKeyPrompt.value == null) {
+            _hostKeyPrompt.value = prompt
+        } else {
+            pendingPrompts.addLast(prompt)
+        }
+    }
+
+    private fun advancePrompt() {
+        _hostKeyPrompt.value = if (pendingPrompts.isEmpty()) null else pendingPrompts.removeFirst()
+    }
+
+    private fun clearPromptForServer(serverId: String) {
+        val current = _hostKeyPrompt.value
+        if (current?.serverId == serverId) {
+            advancePrompt()
+        }
+        if (pendingPrompts.isNotEmpty()) {
+            val iterator = pendingPrompts.iterator()
+            while (iterator.hasNext()) {
+                if (iterator.next().serverId == serverId) {
+                    iterator.remove()
+                }
+            }
+        }
     }
 
     override fun onCleared() {

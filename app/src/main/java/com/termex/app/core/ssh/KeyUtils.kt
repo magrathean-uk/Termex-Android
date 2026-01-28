@@ -1,8 +1,8 @@
 package com.termex.app.core.ssh
 
-import android.util.Base64
 import java.security.MessageDigest
 import java.security.PublicKey
+import java.util.Base64
 
 object KeyUtils {
 
@@ -14,7 +14,7 @@ object KeyUtils {
         val encoded = publicKey.encoded
         val digest = MessageDigest.getInstance("SHA-256")
         val hash = digest.digest(encoded)
-        val base64 = Base64.encodeToString(hash, Base64.NO_WRAP or Base64.NO_PADDING)
+        val base64 = Base64.getEncoder().withoutPadding().encodeToString(hash)
         return "SHA256:$base64"
     }
 
@@ -24,7 +24,7 @@ object KeyUtils {
     fun calculateFingerprint(publicKeyBytes: ByteArray): String {
         val digest = MessageDigest.getInstance("SHA-256")
         val hash = digest.digest(publicKeyBytes)
-        val base64 = Base64.encodeToString(hash, Base64.NO_WRAP or Base64.NO_PADDING)
+        val base64 = Base64.getEncoder().withoutPadding().encodeToString(hash)
         return "SHA256:$base64"
     }
 
@@ -38,7 +38,7 @@ object KeyUtils {
             val parts = openSSHPublicKey.trim().split(" ")
             if (parts.size < 2) return null
 
-            val keyData = Base64.decode(parts[1], Base64.DEFAULT)
+            val keyData = Base64.getDecoder().decode(parts[1])
             calculateFingerprint(keyData)
         } catch (e: Exception) {
             null
@@ -78,7 +78,7 @@ object KeyUtils {
      * Encode public key to Base64 string for storage.
      */
     fun encodePublicKey(publicKey: PublicKey): String {
-        return Base64.encodeToString(publicKey.encoded, Base64.NO_WRAP)
+        return Base64.getEncoder().encodeToString(publicKey.encoded)
     }
 
     /**

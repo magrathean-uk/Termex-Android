@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.termex.app.core.ssh.SSHConnectionState
+import com.termex.app.ui.components.HostKeyVerificationDialog
 import com.termex.app.ui.components.TerminalView
 import com.termex.app.ui.viewmodel.MultiTerminalViewModel
 import com.termex.app.ui.viewmodel.TerminalPaneState
@@ -48,6 +49,7 @@ fun MultiTerminalScreen(
     val servers by viewModel.servers.collectAsState()
     val paneStates by viewModel.paneStates.collectAsState()
     val selectedPane by viewModel.selectedPane.collectAsState()
+    val hostKeyPrompt by viewModel.hostKeyPrompt.collectAsState()
 
     LaunchedEffect(servers) {
         if (servers.isNotEmpty() && paneStates.isEmpty()) {
@@ -78,6 +80,13 @@ fun MultiTerminalScreen(
         },
         containerColor = Color.Black
     ) { padding ->
+        hostKeyPrompt?.let { prompt ->
+            HostKeyVerificationDialog(
+                verification = prompt.result,
+                onAccept = { viewModel.acceptHostKey() },
+                onReject = { viewModel.rejectHostKey() }
+            )
+        }
         if (servers.isEmpty()) {
             Box(
                 modifier = Modifier

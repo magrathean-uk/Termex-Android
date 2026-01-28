@@ -20,7 +20,9 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.onSizeChanged
 import com.termex.app.core.ssh.AnsiParser
 import com.termex.app.core.ssh.TerminalBuffer
 import kotlinx.coroutines.delay
@@ -34,14 +36,16 @@ fun TerminalView(
     backgroundColor: Color = Color(0xFF000000),
     foregroundColor: Color = Color(0xFFE5E5E5),
     cursorColor: Color = Color(0xFFE5E5E5),
-    onTap: () -> Unit = {}
+    onTap: () -> Unit = {},
+    onSizeChanged: (cols: Int, rows: Int, widthPx: Int, heightPx: Int) -> Unit = { _, _, _, _ -> }
 ) {
     val density = LocalDensity.current
     var scale by remember { mutableFloatStateOf(1f) }
     var showCursor by remember { mutableStateOf(true) }
+    var viewSize by remember { mutableStateOf(IntSize.Zero) }
     
     // Cursor blink effect
-    LaunchedEffect(cursorPosition) {
+    LaunchedEffect(Unit) {
         while (true) {
             delay(530)
             showCursor = !showCursor
@@ -49,8 +53,8 @@ fun TerminalView(
     }
     
     val effectiveFontSize = fontSize * scale
-    val charWidth = effectiveFontSize * 0.6f
-    val lineHeight = effectiveFontSize * 1.2f
+    val charWidthPx = with(density) { (effectiveFontSize * 0.6f).sp.toPx() }
+    val lineHeightPx = with(density) { (effectiveFontSize * 1.2f).sp.toPx() }
     
     val paint = remember(effectiveFontSize) {
         android.graphics.Paint().apply {
@@ -59,11 +63,20 @@ fun TerminalView(
             typeface = android.graphics.Typeface.MONOSPACE
         }
     }
+
+    LaunchedEffect(viewSize, effectiveFontSize) {
+        if (viewSize.width > 0 && viewSize.height > 0) {
+            val cols = (viewSize.width / charWidthPx).toInt().coerceAtLeast(1)
+            val rows = (viewSize.height / lineHeightPx).toInt().coerceAtLeast(1)
+            onSizeChanged(cols, rows, viewSize.width, viewSize.height)
+        }
+    }
     
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(backgroundColor)
+            .onSizeChanged { size -> viewSize = size }
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = { onTap() }
@@ -76,8 +89,8 @@ fun TerminalView(
             }
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val scaledCharWidth = with(density) { charWidth.sp.toPx() }
-            val scaledLineHeight = with(density) { lineHeight.sp.toPx() }
+            val scaledCharWidth = charWidthPx
+            val scaledLineHeight = lineHeightPx
             
             lines.forEachIndexed { lineIndex, line ->
                 var x = 0f

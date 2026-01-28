@@ -41,6 +41,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.termex.app.ui.components.HostKeyVerificationDialog
+import com.termex.app.ui.components.PasswordDialog
 import com.termex.app.domain.PortForwardType
 import com.termex.app.ui.viewmodel.PortForwardingViewModel
 
@@ -55,6 +57,24 @@ fun PortForwardingScreen(
     val showDialog by viewModel.showDialog.collectAsState()
     val formState by viewModel.formState.collectAsState()
     val activeForwards by viewModel.activeForwards.collectAsState()
+    val needsPassword by viewModel.needsPassword.collectAsState()
+    val hostKeyVerification by viewModel.hostKeyVerification.collectAsState()
+
+    if (needsPassword) {
+        PasswordDialog(
+            hostname = server?.hostname ?: "",
+            onConfirm = { password -> viewModel.providePassword(password) },
+            onDismiss = { viewModel.cancelPasswordPrompt() }
+        )
+    }
+
+    hostKeyVerification?.let { verification ->
+        HostKeyVerificationDialog(
+            verification = verification,
+            onAccept = { viewModel.acceptHostKey() },
+            onReject = { viewModel.rejectHostKey() }
+        )
+    }
 
     Scaffold(
         topBar = {

@@ -8,10 +8,9 @@ import com.termex.app.core.ssh.HostKeyVerificationResult
 import com.termex.app.core.ssh.SSHClient
 import com.termex.app.core.ssh.SSHConnectionConfig
 import com.termex.app.core.ssh.SSHConnectionState
-import com.termex.app.core.ssh.TermexHostKeyVerifier
+import com.termex.app.core.ssh.SshConfigBuilder
 import com.termex.app.core.ssh.TerminalBuffer
 import com.termex.app.data.prefs.UserPreferencesRepository
-import com.termex.app.domain.AuthMode
 import com.termex.app.domain.Server
 import com.termex.app.domain.ServerRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,15 +22,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.io.File
 import javax.inject.Inject
 
 @HiltViewModel
 class TerminalViewModel @Inject constructor(
     private val sshClient: SSHClient,
     private val serverRepository: ServerRepository,
-    private val hostKeyVerifier: TermexHostKeyVerifier,
-    private val userPreferencesRepository: UserPreferencesRepository
+    private val userPreferencesRepository: UserPreferencesRepository,
+    private val sshConfigBuilder: SshConfigBuilder
 ) : ViewModel() {
 
     private val _connectionState = MutableStateFlow<SSHConnectionState>(SSHConnectionState.Disconnected)
@@ -60,7 +58,7 @@ class TerminalViewModel @Inject constructor(
     private val _hostKeyVerification = MutableStateFlow<HostKeyVerificationResult?>(null)
     val hostKeyVerification: StateFlow<HostKeyVerificationResult?> = _hostKeyVerification.asStateFlow()
 
-    private var pendingConfig: SSHConnectionConfig? = null
+    private var pendingServerId: String? = null
     private var hostKeyVerificationDeferred: CompletableDeferred<Boolean>? = null
 
     init {
@@ -74,7 +72,7 @@ class TerminalViewModel @Inject constructor(
         // Sync connection state from SSH client
         viewModelScope.launch {
             sshClient.connectionState.collect { state ->
-                if (!isInDemoMode) {
+                if (!isInDemoMode && _hostKeyVerification.value == null) {
                     _connectionState.value = state
                 }
             }
@@ -83,6 +81,7 @@ class TerminalViewModel @Inject constructor(
         sshClient.setHostKeyVerificationCallback(object : HostKeyVerificationCallback {
             override suspend fun onVerificationRequired(result: HostKeyVerificationResult): Boolean {
                 _hostKeyVerification.value = result
+                _connectionState.value = SSHConnectionState.VerifyingHostKey(result)
                 hostKeyVerificationDeferred = CompletableDeferred()
                 return hostKeyVerificationDeferred!!.await()
             }
@@ -93,27 +92,7 @@ class TerminalViewModel @Inject constructor(
         viewModelScope.launch {
             val verification = _hostKeyVerification.value
             if (verification != null) {
-                when (verification) {
-                    is HostKeyVerificationResult.Unknown -> {
-                        hostKeyVerifier.acceptHostKey(
-                            hostname = verification.hostname,
-                            port = verification.port,
-                            keyType = verification.keyType,
-                            fingerprint = verification.fingerprint,
-                            publicKey = verification.publicKey
-                        )
-                    }
-                    is HostKeyVerificationResult.Changed -> {
-                        hostKeyVerifier.replaceHostKey(
-                            hostname = verification.hostname,
-                            port = verification.port,
-                            keyType = verification.keyType,
-                            fingerprint = verification.newFingerprint,
-                            publicKey = verification.publicKey
-                        )
-                    }
-                    is HostKeyVerificationResult.Trusted -> {}
-                }
+                sshClient.trustHostKey(verification)
                 _hostKeyVerification.value = null
                 hostKeyVerificationDeferred?.complete(true)
                 hostKeyVerificationDeferred = null
@@ -129,6 +108,9 @@ class TerminalViewModel @Inject constructor(
 
     fun connect(serverId: String, password: String? = null) {
         viewModelScope.launch {
+            _hostKeyVerification.value = null
+            hostKeyVerificationDeferred?.complete(false)
+            hostKeyVerificationDeferred = null
             // Handle demo server specially
             if (serverId == Server.DEMO_SERVER_ID) {
                 connectToDemo()
@@ -150,71 +132,17 @@ class TerminalViewModel @Inject constructor(
                 return@launch
             }
 
-            val savedPassword = server.passwordKeychainID?.takeIf { it.isNotBlank() }
-            val effectivePassword = password?.takeIf { it.isNotBlank() } ?: savedPassword
-
-            val keyPath = server.keyId?.takeIf { it.isNotBlank() }
-            val privateKeyBytes = keyPath?.let { path ->
-                val keyFile = File(path)
-                if (keyFile.exists()) keyFile.readBytes() else null
+            val config = sshConfigBuilder.buildConfig(server, password)
+            if (config == null) {
+                _connectionState.value = SSHConnectionState.Error("Invalid connection config")
+                return@launch
             }
-
-            val shouldPromptPassword = effectivePassword == null && privateKeyBytes == null
+            val shouldPromptPassword = config.password == null && config.privateKey == null
             if (shouldPromptPassword) {
-                // Need to prompt for password
-                pendingConfig = SSHConnectionConfig(
-                    hostname = server.hostname,
-                    port = server.port,
-                    username = server.username
-                )
+                pendingServerId = server.id
                 _needsPassword.value = true
                 return@launch
             }
-
-            val config = when (server.authMode) {
-                AuthMode.KEY -> {
-                    if (privateKeyBytes != null) {
-                        SSHConnectionConfig(
-                            hostname = server.hostname,
-                            port = server.port,
-                            username = server.username,
-                            privateKey = privateKeyBytes
-                        )
-                    } else {
-                        SSHConnectionConfig(
-                            hostname = server.hostname,
-                            port = server.port,
-                            username = server.username,
-                            password = effectivePassword
-                        )
-                    }
-                }
-                AuthMode.PASSWORD -> {
-                    if (effectivePassword != null) {
-                        SSHConnectionConfig(
-                            hostname = server.hostname,
-                            port = server.port,
-                            username = server.username,
-                            password = effectivePassword
-                        )
-                    } else {
-                        SSHConnectionConfig(
-                            hostname = server.hostname,
-                            port = server.port,
-                            username = server.username,
-                            privateKey = privateKeyBytes
-                        )
-                    }
-                }
-                AuthMode.AUTO -> SSHConnectionConfig(
-                    hostname = server.hostname,
-                    port = server.port,
-                    username = server.username,
-                    privateKey = privateKeyBytes,
-                    password = effectivePassword
-                )
-            }
-
             performConnect(config)
         }
     }
@@ -251,12 +179,15 @@ class TerminalViewModel @Inject constructor(
     
     fun providePassword(password: String) {
         _needsPassword.value = false
-        pendingConfig?.let { config ->
+        val serverId = pendingServerId
+        pendingServerId = null
+        if (serverId != null) {
             viewModelScope.launch {
-                performConnect(config.copy(password = password))
+                val server = serverRepository.getServer(serverId) ?: return@launch
+                val config = sshConfigBuilder.buildConfig(server, passwordOverride = password) ?: return@launch
+                performConnect(config)
             }
         }
-        pendingConfig = null
     }
     
     private suspend fun performConnect(config: SSHConnectionConfig) {
@@ -282,6 +213,7 @@ class TerminalViewModel @Inject constructor(
                         terminalBuffer.write(data)
                     } else if (bytesRead == -1) {
                         // End of stream
+                        sshClient.disconnect()
                         break
                     }
                 }
@@ -308,12 +240,21 @@ class TerminalViewModel @Inject constructor(
     }
     
     fun resizeTerminal(cols: Int, rows: Int) {
+        terminalBuffer.resize(cols, rows)
         sshClient.resizeTerminal(cols, rows)
+    }
+
+    fun resizeTerminal(cols: Int, rows: Int, widthPx: Int, heightPx: Int) {
+        terminalBuffer.resize(cols, rows)
+        sshClient.resizeTerminal(cols, rows, widthPx, heightPx)
     }
     
     fun disconnect() {
         readJob?.cancel()
         readJob = null
+        _hostKeyVerification.value = null
+        hostKeyVerificationDeferred?.complete(false)
+        hostKeyVerificationDeferred = null
 
         if (isInDemoMode) {
             isInDemoMode = false
@@ -329,6 +270,7 @@ class TerminalViewModel @Inject constructor(
     
     override fun onCleared() {
         super.onCleared()
+        sshClient.setHostKeyVerificationCallback(null)
         disconnect()
     }
 }

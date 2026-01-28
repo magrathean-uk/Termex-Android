@@ -122,6 +122,9 @@ fun MainTabs(
                     },
                     onEditServer = { server ->
                         rootNavController.navigate(Route.ServerSettings.createRoute(server.id))
+                    },
+                    onPortForwarding = { server ->
+                        rootNavController.navigate(Route.PortForwarding.createRoute(server.id))
                     }
                 )
             }
@@ -144,6 +147,7 @@ fun ServerListScreen(
     onServerClick: (Server) -> Unit,
     onAddServer: () -> Unit,
     onEditServer: (Server) -> Unit,
+    onPortForwarding: (Server) -> Unit,
     viewModel: ServersViewModel = hiltViewModel()
 ) {
     val servers by viewModel.servers.collectAsState()
@@ -241,6 +245,14 @@ fun ServerListScreen(
                                                 onEditServer(server)
                                             },
                                             leadingIcon = { Icon(Icons.Default.Edit, null) }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Port Forwarding") },
+                                            onClick = {
+                                                showMenu = false
+                                                onPortForwarding(server)
+                                            },
+                                            leadingIcon = { Icon(Icons.Default.Dns, null) }
                                         )
                                         DropdownMenuItem(
                                             text = { Text("Delete") },

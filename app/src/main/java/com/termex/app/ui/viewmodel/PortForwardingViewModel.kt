@@ -3,16 +3,25 @@ package com.termex.app.ui.viewmodel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.termex.app.core.ssh.HostKeyVerificationCallback
+import com.termex.app.core.ssh.HostKeyVerificationResult
 import com.termex.app.core.ssh.PortForwardManager
+import com.termex.app.core.ssh.SSHClient
+import com.termex.app.core.ssh.SSHConnectionState
+import com.termex.app.core.ssh.SshConfigBuilder
 import com.termex.app.domain.PortForward
 import com.termex.app.domain.PortForwardType
 import com.termex.app.domain.Server
 import com.termex.app.domain.ServerRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 data class PortForwardFormState(
@@ -28,7 +37,9 @@ data class PortForwardFormState(
 class PortForwardingViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val serverRepository: ServerRepository,
-    private val portForwardManager: PortForwardManager
+    private val portForwardManager: PortForwardManager,
+    private val sshClient: SSHClient,
+    private val sshConfigBuilder: SshConfigBuilder
 ) : ViewModel() {
 
     private val serverId: String = savedStateHandle.get<String>("serverId") ?: ""
@@ -44,8 +55,30 @@ class PortForwardingViewModel @Inject constructor(
 
     val activeForwards = portForwardManager.activeForwards
 
+    private val _connectionState = MutableStateFlow<SSHConnectionState>(SSHConnectionState.Disconnected)
+    val connectionState: StateFlow<SSHConnectionState> = _connectionState.asStateFlow()
+
+    private val _needsPassword = MutableStateFlow(false)
+    val needsPassword: StateFlow<Boolean> = _needsPassword.asStateFlow()
+
+    private val _hostKeyVerification = MutableStateFlow<HostKeyVerificationResult?>(null)
+    val hostKeyVerification: StateFlow<HostKeyVerificationResult?> = _hostKeyVerification.asStateFlow()
+
+    private val connectionMutex = Mutex()
+    private var pendingServerId: String? = null
+    private var pendingForward: PortForward? = null
+    private var hostKeyVerificationDeferred: CompletableDeferred<Boolean>? = null
+
     init {
         loadServer()
+        sshClient.setHostKeyVerificationCallback(object : HostKeyVerificationCallback {
+            override suspend fun onVerificationRequired(result: HostKeyVerificationResult): Boolean {
+                _hostKeyVerification.value = result
+                _connectionState.value = SSHConnectionState.VerifyingHostKey(result)
+                hostKeyVerificationDeferred = CompletableDeferred()
+                return hostKeyVerificationDeferred!!.await()
+            }
+        })
     }
 
     private fun loadServer() {
@@ -149,7 +182,98 @@ class PortForwardingViewModel @Inject constructor(
         if (activeForward?.isActive == true) {
             portForwardManager.stopForward(portForward.id)
         } else {
-            portForwardManager.startForward(portForward)
+            viewModelScope.launch(Dispatchers.IO) {
+                pendingForward = portForward
+                if (ensureConnected()) {
+                    pendingForward = null
+                    portForwardManager.startForward(portForward)
+                } else if (!_needsPassword.value) {
+                    pendingForward = null
+                }
+            }
         }
+    }
+
+    fun providePassword(password: String) {
+        _needsPassword.value = false
+        val serverId = pendingServerId
+        if (serverId != null) {
+            viewModelScope.launch(Dispatchers.IO) {
+                val server = serverRepository.getServer(serverId) ?: return@launch
+                val config = sshConfigBuilder.buildConfig(server, passwordOverride = password) ?: return@launch
+                val result = sshClient.connect(config)
+                if (result.isSuccess) {
+                    _connectionState.value = SSHConnectionState.Connected
+                    portForwardManager.setClient(sshClient)
+                    pendingForward?.let { portForwardManager.startForward(it) }
+                    pendingForward = null
+                } else {
+                    _connectionState.value = SSHConnectionState.Error(
+                        result.exceptionOrNull()?.message ?: "Failed to connect"
+                    )
+                }
+            }
+        }
+        pendingServerId = null
+    }
+
+    fun cancelPasswordPrompt() {
+        _needsPassword.value = false
+        pendingServerId = null
+        pendingForward = null
+    }
+
+    fun acceptHostKey() {
+        viewModelScope.launch {
+            val verification = _hostKeyVerification.value ?: return@launch
+            sshClient.trustHostKey(verification)
+            _hostKeyVerification.value = null
+            hostKeyVerificationDeferred?.complete(true)
+            hostKeyVerificationDeferred = null
+        }
+    }
+
+    fun rejectHostKey() {
+        _hostKeyVerification.value = null
+        hostKeyVerificationDeferred?.complete(false)
+        hostKeyVerificationDeferred = null
+    }
+
+    private suspend fun ensureConnected(): Boolean {
+        return connectionMutex.withLock {
+            if (sshClient.isConnected()) return@withLock true
+            val server = _server.value ?: return@withLock false
+            val config = sshConfigBuilder.buildConfig(server)
+            if (config == null) {
+                _connectionState.value = SSHConnectionState.Error("Invalid connection config")
+                return@withLock false
+            }
+            if (config.password == null && config.privateKey == null) {
+                pendingServerId = server.id
+                _needsPassword.value = true
+                _connectionState.value = SSHConnectionState.Error("Password required")
+                return@withLock false
+            }
+            _connectionState.value = SSHConnectionState.Connecting
+            val result = sshClient.connect(config)
+            if (result.isSuccess) {
+                _connectionState.value = SSHConnectionState.Connected
+                portForwardManager.setClient(sshClient)
+                return@withLock true
+            }
+            _connectionState.value = SSHConnectionState.Error(
+                result.exceptionOrNull()?.message ?: "Failed to connect"
+            )
+            false
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        hostKeyVerificationDeferred?.complete(false)
+        hostKeyVerificationDeferred = null
+        sshClient.setHostKeyVerificationCallback(null)
+        portForwardManager.setClient(null)
+        sshClient.disconnect()
     }
 }

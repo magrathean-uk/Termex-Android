@@ -118,8 +118,9 @@ dependencies {
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.biometric:biometric:1.1.0")
 
-    // SSH - SSHJ
-    implementation("com.hierynomus:sshj:0.39.0")
+    // SSH - Apache MINA SSHD
+    implementation("org.apache.sshd:sshd-core:2.16.0")
+    implementation("net.i2p.crypto:eddsa:0.3.0") // ed25519 support
     implementation("org.slf4j:slf4j-simple:2.0.13")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.78.1")
     implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")

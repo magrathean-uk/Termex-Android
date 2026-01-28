@@ -3,11 +3,13 @@ package com.termex.app.core.ssh
 import com.termex.app.domain.KnownHost
 import com.termex.app.domain.KnownHostRepository
 import kotlinx.coroutines.runBlocking
-import net.schmizz.sshj.transport.verification.HostKeyVerifier
+import org.apache.sshd.client.keyverifier.ServerKeyVerifier
+import org.apache.sshd.client.session.ClientSession
+import java.net.InetSocketAddress
+import java.net.SocketAddress
 import java.security.PublicKey
 import java.util.Date
 import javax.inject.Inject
-import javax.inject.Singleton
 
 sealed class HostKeyVerificationResult {
     data object Trusted : HostKeyVerificationResult()
@@ -36,10 +38,9 @@ interface HostKeyVerificationCallback {
     suspend fun onVerificationRequired(result: HostKeyVerificationResult): Boolean
 }
 
-@Singleton
 class TermexHostKeyVerifier @Inject constructor(
     private val knownHostRepository: KnownHostRepository
-) : HostKeyVerifier {
+) : ServerKeyVerifier {
 
     @Volatile
     private var pendingVerification: HostKeyVerificationResult? = null
@@ -50,8 +51,19 @@ class TermexHostKeyVerifier @Inject constructor(
     @Volatile
     private var lastVerificationResult: Boolean = false
 
+    @Volatile
+    private var targetHost: String? = null
+
+    @Volatile
+    private var targetPort: Int? = null
+
     fun setCallback(callback: HostKeyVerificationCallback?) {
         verificationCallback = callback
+    }
+
+    fun setTarget(host: String, port: Int) {
+        targetHost = host
+        targetPort = port
     }
 
     fun getPendingVerification(): HostKeyVerificationResult? = pendingVerification
@@ -60,16 +72,28 @@ class TermexHostKeyVerifier @Inject constructor(
         pendingVerification = null
     }
 
-    override fun findExistingAlgorithms(hostname: String, port: Int): List<String> {
-        // Return empty list - we handle verification ourselves
-        return emptyList()
+    override fun verifyServerKey(
+        clientSession: ClientSession?,
+        remoteAddress: SocketAddress?,
+        serverKey: PublicKey?
+    ): Boolean {
+        if (serverKey == null) return false
+        val (hostname, port) = resolveTarget(remoteAddress)
+        return runBlocking {
+            verifyAsync(hostname, port, serverKey)
+        }
     }
 
-    override fun verify(hostname: String, port: Int, key: PublicKey): Boolean {
-        // This runs on the IO thread during SSH connection
-        return runBlocking {
-            verifyAsync(hostname, port, key)
+    private fun resolveTarget(remoteAddress: SocketAddress?): Pair<String, Int> {
+        val host = targetHost
+        val port = targetPort
+        if (host != null && port != null) {
+            return host to port
         }
+        val inet = remoteAddress as? InetSocketAddress
+        val resolvedHost = inet?.hostString ?: "unknown"
+        val resolvedPort = inet?.port ?: 22
+        return resolvedHost to resolvedPort
     }
 
     private suspend fun verifyAsync(hostname: String, port: Int, key: PublicKey): Boolean {
@@ -124,6 +148,30 @@ class TermexHostKeyVerifier @Inject constructor(
                     false
                 }
             }
+        }
+    }
+
+    suspend fun trustHostKey(result: HostKeyVerificationResult) {
+        when (result) {
+            is HostKeyVerificationResult.Unknown -> {
+                acceptHostKey(
+                    hostname = result.hostname,
+                    port = result.port,
+                    keyType = result.keyType,
+                    fingerprint = result.fingerprint,
+                    publicKey = result.publicKey
+                )
+            }
+            is HostKeyVerificationResult.Changed -> {
+                replaceHostKey(
+                    hostname = result.hostname,
+                    port = result.port,
+                    keyType = result.keyType,
+                    fingerprint = result.newFingerprint,
+                    publicKey = result.publicKey
+                )
+            }
+            is HostKeyVerificationResult.Trusted -> Unit
         }
     }
 

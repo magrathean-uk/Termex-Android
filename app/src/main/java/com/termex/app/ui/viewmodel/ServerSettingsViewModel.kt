@@ -2,6 +2,7 @@ package com.termex.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.termex.app.data.crypto.SecurePasswordStore
 import com.termex.app.domain.AuthMode
 import com.termex.app.domain.KeyRepository
 import com.termex.app.domain.SSHKey
@@ -35,7 +36,8 @@ data class ServerFormState(
 @HiltViewModel
 class ServerSettingsViewModel @Inject constructor(
     private val serverRepository: ServerRepository,
-    private val keyRepository: KeyRepository
+    private val keyRepository: KeyRepository,
+    private val passwordStore: SecurePasswordStore
 ) : ViewModel() {
 
     private val _formState = MutableStateFlow(ServerFormState())
@@ -57,6 +59,10 @@ class ServerSettingsViewModel @Inject constructor(
             val key = server.keyId?.let { keyId ->
                 keys.value.find { it.path == keyId }
             }
+            val resolvedPassword = passwordStore.resolvePassword(server.id, server.passwordKeychainID)
+            if (resolvedPassword.keyId != null && resolvedPassword.keyId != server.passwordKeychainID) {
+                serverRepository.updateServer(server.copy(passwordKeychainID = resolvedPassword.keyId))
+            }
 
             _formState.value = ServerFormState(
                 id = server.id,
@@ -66,7 +72,7 @@ class ServerSettingsViewModel @Inject constructor(
                 username = server.username,
                 authMode = server.authMode,
                 password = "", // Don't load password for security
-                hasStoredPassword = !server.passwordKeychainID.isNullOrEmpty(),
+                hasStoredPassword = resolvedPassword.password != null || !server.passwordKeychainID.isNullOrEmpty(),
                 keyId = server.keyId,
                 selectedKeyName = key?.name,
                 jumpHostId = server.jumpHostId,
@@ -128,19 +134,20 @@ class ServerSettingsViewModel @Inject constructor(
         val port = form.port.toIntOrNull() ?: 22
 
         viewModelScope.launch {
+            val serverId = form.id ?: java.util.UUID.randomUUID().toString()
             // Determine the password to save:
             // - If new password entered, use it
             // - If hasStoredPassword and no new password, preserve existing
             // - If !hasStoredPassword and no new password, set to null (cleared)
             val existingServer = form.id?.let { serverRepository.getServer(it) }
             val passwordToSave = when {
-                form.password.isNotEmpty() -> form.password
+                form.password.isNotEmpty() -> passwordStore.savePasswordForServer(serverId, form.password)
                 form.hasStoredPassword -> existingServer?.passwordKeychainID
                 else -> null
             }
 
             val server = Server(
-                id = form.id ?: java.util.UUID.randomUUID().toString(),
+                id = serverId,
                 name = form.name.ifBlank { form.hostname },
                 hostname = form.hostname,
                 port = port,
@@ -156,6 +163,10 @@ class ServerSettingsViewModel @Inject constructor(
                 serverRepository.updateServer(server)
             } else {
                 serverRepository.addServer(server)
+            }
+
+            if (form.password.isEmpty() && !form.hasStoredPassword) {
+                passwordStore.deletePassword(existingServer?.passwordKeychainID)
             }
 
             _isSaving.value = false

@@ -5,11 +5,7 @@ import com.termex.app.domain.PortForwardType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import net.schmizz.sshj.SSHClient
-import net.schmizz.sshj.connection.channel.forwarded.RemotePortForwarder
-import net.schmizz.sshj.connection.channel.forwarded.SocketForwardingConnectListener
-import java.net.InetSocketAddress
-import java.net.ServerSocket
+import org.apache.sshd.common.util.net.SshdSocketAddress
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,7 +21,13 @@ class PortForwardManager @Inject constructor() {
     private val _activeForwards = MutableStateFlow<List<ActivePortForward>>(emptyList())
     val activeForwards: StateFlow<List<ActivePortForward>> = _activeForwards.asStateFlow()
 
-    private val localForwardSockets = mutableMapOf<String, ServerSocket>()
+    private data class ForwardHandle(
+        val forward: PortForward,
+        val boundAddress: SshdSocketAddress,
+        val type: PortForwardType
+    )
+
+    private val forwardHandles = mutableMapOf<String, ForwardHandle>()
     private var currentClient: SSHClient? = null
 
     fun setClient(client: SSHClient?) {
@@ -37,6 +39,9 @@ class PortForwardManager @Inject constructor() {
 
     fun startForward(forward: PortForward): Result<Unit> {
         val client = currentClient ?: return Result.failure(Exception("Not connected"))
+        if (forwardHandles.containsKey(forward.id)) {
+            return Result.success(Unit)
+        }
 
         return try {
             when (forward.type) {
@@ -55,88 +60,44 @@ class PortForwardManager @Inject constructor() {
 
     private fun startLocalForward(client: SSHClient, forward: PortForward) {
         // Local port forwarding: connections to localPort are forwarded to remoteHost:remotePort
-        val serverSocket = ServerSocket()
-        serverSocket.reuseAddress = true
-        serverSocket.bind(InetSocketAddress("localhost", forward.localPort))
-        localForwardSockets[forward.id] = serverSocket
-
-        // Start forwarding in a background thread using direct-tcpip channel
-        Thread {
-            try {
-                while (!serverSocket.isClosed) {
-                    val socket = serverSocket.accept()
-                    // For each connection, open a direct-tcpip channel to forward traffic
-                    Thread {
-                        try {
-                            val channel = client.newDirectConnection(
-                                forward.remoteHost,
-                                forward.remotePort
-                            )
-                            val localIn = socket.getInputStream()
-                            val localOut = socket.getOutputStream()
-                            val remoteIn = channel.inputStream
-                            val remoteOut = channel.outputStream
-
-                            // Forward local to remote
-                            Thread {
-                                try {
-                                    localIn.copyTo(remoteOut)
-                                } catch (_: Exception) {}
-                            }.start()
-
-                            // Forward remote to local
-                            remoteIn.copyTo(localOut)
-                        } catch (_: Exception) {
-                        } finally {
-                            socket.close()
-                        }
-                    }.start()
-                }
-            } catch (e: Exception) {
-                updateForwardState(forward.id, isActive = false, error = e.message)
-            }
-        }.start()
+        val local = SshdSocketAddress("127.0.0.1", forward.localPort)
+        val remote = SshdSocketAddress(forward.remoteHost, forward.remotePort)
+        val bound = client.startLocalPortForwarding(local, remote)
+        forwardHandles[forward.id] = ForwardHandle(forward, bound, PortForwardType.LOCAL)
     }
 
     private fun startRemoteForward(client: SSHClient, forward: PortForward) {
         // Remote port forwarding: connections to remotePort on server are forwarded to localhost:localPort
-        client.remotePortForwarder.bind(
-            RemotePortForwarder.Forward(forward.remotePort),
-            SocketForwardingConnectListener(InetSocketAddress("localhost", forward.localPort))
-        )
+        val remoteBind = SshdSocketAddress(forward.remoteHost, forward.remotePort)
+        val localTarget = SshdSocketAddress("127.0.0.1", forward.localPort)
+        val bound = client.startRemotePortForwarding(remoteBind, localTarget)
+        forwardHandles[forward.id] = ForwardHandle(forward, bound, PortForwardType.REMOTE)
     }
 
     private fun startDynamicForward(client: SSHClient, forward: PortForward) {
-        // Dynamic SOCKS proxy - SSHJ supports this via local port forwarder with special handling
-        // For simplicity, we'll implement a basic local port that acts as SOCKS proxy
-        // This is a simplified implementation - full SOCKS5 would require more work
-        val serverSocket = ServerSocket()
-        serverSocket.reuseAddress = true
-        serverSocket.bind(InetSocketAddress("localhost", forward.localPort))
-        localForwardSockets[forward.id] = serverSocket
-
-        // Note: Full SOCKS5 proxy implementation would require additional handling
-        // For now, mark as active - the actual SOCKS handling would need more code
+        val local = SshdSocketAddress("127.0.0.1", forward.localPort)
+        val bound = client.startDynamicPortForwarding(local)
+        forwardHandles[forward.id] = ForwardHandle(forward, bound, PortForwardType.DYNAMIC)
     }
 
     fun stopForward(forwardId: String) {
-        localForwardSockets[forwardId]?.let { socket ->
+        val handle = forwardHandles.remove(forwardId)
+        handle?.let { h ->
             try {
-                socket.close()
-            } catch (_: Exception) {}
-            localForwardSockets.remove(forwardId)
+                when (h.type) {
+                    PortForwardType.LOCAL -> currentClient?.stopLocalPortForwarding(h.boundAddress)
+                    PortForwardType.REMOTE -> currentClient?.stopRemotePortForwarding(h.boundAddress)
+                    PortForwardType.DYNAMIC -> currentClient?.stopDynamicPortForwarding(h.boundAddress)
+                }
+            } catch (_: Exception) {
+            }
         }
 
         updateForwardState(forwardId, isActive = false)
     }
 
     fun stopAllForwards() {
-        localForwardSockets.values.forEach { socket ->
-            try {
-                socket.close()
-            } catch (_: Exception) {}
-        }
-        localForwardSockets.clear()
+        forwardHandles.keys.toList().forEach { stopForward(it) }
         _activeForwards.value = emptyList()
     }
 
@@ -145,6 +106,10 @@ class PortForwardManager @Inject constructor() {
         val index = current.indexOfFirst { it.config.id == id }
         if (index >= 0) {
             current[index] = current[index].copy(isActive = isActive, error = error)
+            _activeForwards.value = current
+        } else {
+            val config = forwardHandles[id]?.forward ?: return
+            current.add(ActivePortForward(config, isActive = isActive, error = error))
             _activeForwards.value = current
         }
     }

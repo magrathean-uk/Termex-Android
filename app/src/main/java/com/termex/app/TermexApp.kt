@@ -20,6 +20,7 @@ import com.termex.app.ui.screens.MainTabs
 import com.termex.app.ui.screens.MultiTerminalScreen
 import com.termex.app.ui.screens.OnboardingFlow
 import com.termex.app.ui.screens.PaywallScreen
+import com.termex.app.ui.screens.PortForwardingScreen
 import com.termex.app.ui.screens.ServerSettingsScreen
 import com.termex.app.ui.screens.TerminalScreen
 import com.termex.app.ui.screens.WorkplacesScreen
@@ -138,6 +139,23 @@ fun TermexApp(
                 onRestore = { viewModel.refreshSubscription() }
             ) {
                 ServerSettingsScreen(
+                    serverId = serverId,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+        }
+
+        composable(
+            route = Route.PortForwarding.route,
+            arguments = listOf(navArgument("serverId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val serverId = backStackEntry.arguments?.getString("serverId") ?: return@composable
+            PaywallGate(
+                paywallRequired = paywallRequired,
+                onSubscribed = { viewModel.refreshSubscription() },
+                onRestore = { viewModel.refreshSubscription() }
+            ) {
+                PortForwardingScreen(
                     serverId = serverId,
                     onNavigateBack = { navController.popBackStack() }
                 )
