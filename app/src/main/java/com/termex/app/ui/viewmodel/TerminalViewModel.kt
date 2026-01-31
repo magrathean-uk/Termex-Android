@@ -108,6 +108,7 @@ class TerminalViewModel @Inject constructor(
 
     fun connect(serverId: String, password: String? = null) {
         viewModelScope.launch {
+            _needsPassword.value = false
             _hostKeyVerification.value = null
             hostKeyVerificationDeferred?.complete(false)
             hostKeyVerificationDeferred = null
@@ -123,7 +124,11 @@ class TerminalViewModel @Inject constructor(
                 return@launch
             }
 
-            val server = serverRepository.getServer(serverId) ?: return@launch
+            val server = serverRepository.getServer(serverId)
+            if (server == null) {
+                _connectionState.value = SSHConnectionState.Error("Server not found")
+                return@launch
+            }
             _currentServer.value = server
 
             // Check if this is a demo server
@@ -255,6 +260,7 @@ class TerminalViewModel @Inject constructor(
         _hostKeyVerification.value = null
         hostKeyVerificationDeferred?.complete(false)
         hostKeyVerificationDeferred = null
+        _needsPassword.value = false
 
         if (isInDemoMode) {
             isInDemoMode = false

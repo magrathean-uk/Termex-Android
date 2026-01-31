@@ -9,6 +9,9 @@ build/
 # Local configuration file (sdk path, etc)
 local.properties
 
+# Signing config (never commit)
+keystore.properties
+
 # IntelliJ/Android Studio
 .idea/
 *.iml

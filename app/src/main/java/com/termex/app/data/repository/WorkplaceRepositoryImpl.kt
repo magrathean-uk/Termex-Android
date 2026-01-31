@@ -39,6 +39,8 @@ class WorkplaceRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteWorkplace(workplace: Workplace) {
+        // Clear references to avoid orphaned server links.
+        serverDao.clearWorkplace(workplace.id)
         workplaceDao.delete(WorkplaceEntity(id = workplace.id, name = workplace.name))
     }
 

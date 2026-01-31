@@ -3,11 +3,11 @@ import subprocess
 import json
 import os
 
-# DB Config
-HOST = "172.17.17.53"
-USER = "teslamate"
-DB = "teslamate"
-PASS = "852266iA"
+# DB Config (provide via environment variables)
+HOST = os.environ.get("TESLA_DB_HOST")
+USER = os.environ.get("TESLA_DB_USER")
+DB = os.environ.get("TESLA_DB_NAME")
+PASS = os.environ.get("TESLA_DB_PASS")
 
 def run_query(label, sql):
     print(f"\n--- {label} ---")
@@ -38,6 +38,20 @@ def run_query(label, sql):
         return False
 
 def main():
+    missing = [name for name, value in {
+        "TESLA_DB_HOST": HOST,
+        "TESLA_DB_USER": USER,
+        "TESLA_DB_NAME": DB,
+        "TESLA_DB_PASS": PASS,
+    }.items() if not value]
+    if missing:
+        print("Missing required environment variables:")
+        for name in missing:
+            print(f"  - {name}")
+        print("\nSet them before running this script. Example:")
+        print("  TESLA_DB_HOST=... TESLA_DB_USER=... TESLA_DB_NAME=... TESLA_DB_PASS=... python verify_db_logic.py")
+        return
+
     print("Starting DB Verification...")
     
     # 1. Fetch Cars

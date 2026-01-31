@@ -19,6 +19,9 @@ interface ServerDao {
     @Query("SELECT * FROM servers WHERE workplaceId = :workplaceId ORDER BY name ASC")
     fun getServersByWorkplace(workplaceId: String): Flow<List<ServerEntity>>
 
+    @Query("UPDATE servers SET workplaceId = NULL WHERE workplaceId = :workplaceId")
+    suspend fun clearWorkplace(workplaceId: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertServer(server: ServerEntity)
 

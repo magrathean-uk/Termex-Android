@@ -70,7 +70,11 @@ class PortForwardingViewModel @Inject constructor(
     private var hostKeyVerificationDeferred: CompletableDeferred<Boolean>? = null
 
     init {
-        loadServer()
+        if (serverId.isBlank()) {
+            _connectionState.value = SSHConnectionState.Error("Server not found")
+        } else {
+            loadServer()
+        }
         sshClient.setHostKeyVerificationCallback(object : HostKeyVerificationCallback {
             override suspend fun onVerificationRequired(result: HostKeyVerificationResult): Boolean {
                 _hostKeyVerification.value = result
@@ -85,6 +89,10 @@ class PortForwardingViewModel @Inject constructor(
         viewModelScope.launch {
             val s = serverRepository.getServer(serverId)
             _server.value = s
+            if (s == null) {
+                _connectionState.value = SSHConnectionState.Error("Server not found")
+                return@launch
+            }
             s?.let { portForwardManager.initializeForwards(it.portForwards) }
         }
     }

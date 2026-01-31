@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -31,6 +30,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
@@ -47,12 +47,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.termex.app.BuildConfig
+import com.termex.app.R
 import com.termex.app.domain.AuthMode
 import com.termex.app.domain.Server
 import com.termex.app.ui.navigation.Route
@@ -70,7 +73,12 @@ fun MainTabs(
     val navController = rememberNavController()
     var selectedItem by remember { mutableIntStateOf(0) }
     
-    val items = listOf("Servers", "Keys", "Snippets", "Settings")
+    val items = listOf(
+        stringResource(R.string.nav_servers),
+        stringResource(R.string.nav_keys),
+        stringResource(R.string.nav_snippets),
+        stringResource(R.string.nav_settings)
+    )
     val icons = listOf(
         Icons.Default.Dns,
         Icons.Default.Key,
@@ -156,40 +164,42 @@ fun ServerListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Servers") }
+                title = { Text(stringResource(R.string.title_servers)) }
             )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddServer) {
-                Icon(Icons.Default.Add, contentDescription = "Add Server")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.action_add_server))
             }
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
             // Demo Mode Warning Banner
             if (demoModeEnabled) {
+                val bannerColor = MaterialTheme.colorScheme.tertiaryContainer
+                val bannerTextColor = MaterialTheme.colorScheme.onTertiaryContainer
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFFFF9800))
+                        .background(bannerColor)
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Default.Warning,
                         contentDescription = null,
-                        tint = Color.White
+                        tint = bannerTextColor
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
-                            text = "DEMO MODE ACTIVE",
-                            color = Color.White,
+                            text = stringResource(R.string.demo_mode_active),
+                            color = bannerTextColor,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Real server connections are disabled. For App Store review only.",
-                            color = Color.White.copy(alpha = 0.9f)
+                            text = stringResource(R.string.demo_mode_message),
+                            color = bannerTextColor.copy(alpha = 0.9f)
                         )
                     }
                 }
@@ -202,7 +212,7 @@ fun ServerListScreen(
                         .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No servers. Tap + to add one.")
+                    Text(stringResource(R.string.empty_servers))
                 }
             } else {
                 LazyColumn(modifier = Modifier.weight(1f)) {
@@ -219,7 +229,7 @@ fun ServerListScreen(
                         },
                         supportingContent = {
                             if (server.isDemo) {
-                                Text("Try Termex without a real server")
+                                Text(stringResource(R.string.try_demo_server))
                             } else {
                                 Text("${server.username}@${server.hostname}:${server.port}")
                             }
@@ -231,7 +241,7 @@ fun ServerListScreen(
                                 Box {
                                     Icon(
                                         Icons.Default.Edit,
-                                        contentDescription = "More",
+                                        contentDescription = stringResource(R.string.action_more),
                                         modifier = Modifier.clickable { showMenu = true }
                                     )
                                     DropdownMenu(
@@ -239,7 +249,7 @@ fun ServerListScreen(
                                         onDismissRequest = { showMenu = false }
                                     ) {
                                         DropdownMenuItem(
-                                            text = { Text("Edit") },
+                                            text = { Text(stringResource(R.string.action_edit)) },
                                             onClick = {
                                                 showMenu = false
                                                 onEditServer(server)
@@ -247,7 +257,7 @@ fun ServerListScreen(
                                             leadingIcon = { Icon(Icons.Default.Edit, null) }
                                         )
                                         DropdownMenuItem(
-                                            text = { Text("Port Forwarding") },
+                                            text = { Text(stringResource(R.string.action_port_forwarding)) },
                                             onClick = {
                                                 showMenu = false
                                                 onPortForwarding(server)
@@ -255,7 +265,7 @@ fun ServerListScreen(
                                             leadingIcon = { Icon(Icons.Default.Dns, null) }
                                         )
                                         DropdownMenuItem(
-                                            text = { Text("Delete") },
+                                            text = { Text(stringResource(R.string.action_delete)) },
                                             onClick = {
                                                 showMenu = false
                                                 viewModel.deleteServer(server)
@@ -288,26 +298,26 @@ fun KeyListScreen(
     
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("SSH Keys") })
+            TopAppBar(title = { Text(stringResource(R.string.title_ssh_keys)) })
         },
         floatingActionButton = {
             Box {
                 FloatingActionButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "Add Key")
+                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.action_add_key))
                 }
                 DropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Generate New Key") },
+                        text = { Text(stringResource(R.string.action_generate_new_key)) },
                         onClick = {
                             showMenu = false
                             viewModel.showGenerateDialog()
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Import Key") },
+                        text = { Text(stringResource(R.string.action_import_key)) },
                         onClick = {
                             showMenu = false
                             viewModel.showImportDialog()
@@ -324,7 +334,7 @@ fun KeyListScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No SSH keys. Tap + to add one.")
+                Text(stringResource(R.string.empty_ssh_keys))
             }
         } else {
             LazyColumn(modifier = Modifier.padding(padding)) {
@@ -348,7 +358,7 @@ fun KeyListScreen(
                             androidx.compose.material3.IconButton(
                                 onClick = { viewModel.deleteKey(key) }
                             ) {
-                                Icon(Icons.Default.Delete, contentDescription = "Delete")
+                                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.action_delete))
                             }
                         }
                     )
@@ -363,13 +373,13 @@ fun KeyListScreen(
         
         AlertDialog(
             onDismissRequest = { viewModel.hideGenerateDialog() },
-            title = { Text("Generate RSA Key") },
+            title = { Text(stringResource(R.string.title_generate_rsa_key)) },
             text = {
                 Column {
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text("Key Name (e.g. id_rsa)") },
+                        label = { Text(stringResource(R.string.label_key_name_example)) },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -379,12 +389,12 @@ fun KeyListScreen(
                     onClick = { viewModel.generateKey(name) },
                     enabled = name.isNotBlank()
                 ) {
-                    Text("Generate")
+                    Text(stringResource(R.string.action_generate))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.hideGenerateDialog() }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )
@@ -396,19 +406,19 @@ fun KeyListScreen(
         
         AlertDialog(
             onDismissRequest = { viewModel.hideImportDialog() },
-            title = { Text("Import Private Key") },
+            title = { Text(stringResource(R.string.title_import_private_key)) },
             text = {
                 Column {
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text("Key Name") },
+                        label = { Text(stringResource(R.string.label_key_name)) },
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = privateKey,
                         onValueChange = { privateKey = it },
-                        label = { Text("Private Key Content") },
+                        label = { Text(stringResource(R.string.label_private_key_content)) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 8.dp),
@@ -421,12 +431,12 @@ fun KeyListScreen(
                     onClick = { viewModel.importKey(name, privateKey, null) },
                     enabled = name.isNotBlank() && privateKey.isNotBlank()
                 ) {
-                    Text("Import")
+                    Text(stringResource(R.string.action_import))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.hideImportDialog() }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )
@@ -443,11 +453,11 @@ fun SnippetListScreen(
     
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Snippets") })
+            TopAppBar(title = { Text(stringResource(R.string.title_snippets)) })
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { viewModel.showAddDialog() }) {
-                Icon(Icons.Default.Add, contentDescription = "Add Snippet")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.action_add_snippet))
             }
         }
     ) { padding ->
@@ -458,7 +468,7 @@ fun SnippetListScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No snippets. Tap + to add one.")
+                Text(stringResource(R.string.empty_snippets))
             }
         } else {
             LazyColumn(modifier = Modifier.padding(padding)) {
@@ -475,7 +485,7 @@ fun SnippetListScreen(
                             androidx.compose.material3.IconButton(
                                 onClick = { viewModel.deleteSnippet(snippet) }
                             ) {
-                                Icon(Icons.Default.Delete, contentDescription = "Delete")
+                                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.action_delete))
                             }
                         }
                     )
@@ -491,19 +501,19 @@ fun SnippetListScreen(
         
         AlertDialog(
             onDismissRequest = { viewModel.dismissAddDialog() },
-            title = { Text("Add Snippet") },
+            title = { Text(stringResource(R.string.title_add_snippet)) },
             text = {
                 Column {
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text("Name") },
+                        label = { Text(stringResource(R.string.label_name)) },
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = command,
                         onValueChange = { command = it },
-                        label = { Text("Command") },
+                        label = { Text(stringResource(R.string.label_command)) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 8.dp),
@@ -516,12 +526,12 @@ fun SnippetListScreen(
                     onClick = { viewModel.addSnippet(name, command) },
                     enabled = name.isNotBlank() && command.isNotBlank()
                 ) {
-                    Text("Save")
+                    Text(stringResource(R.string.action_save))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.dismissAddDialog() }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )
@@ -547,7 +557,7 @@ fun SettingsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Settings") })
+            TopAppBar(title = { Text(stringResource(R.string.title_settings)) })
         }
     ) { padding ->
         LazyColumn(
@@ -557,7 +567,7 @@ fun SettingsScreen(
         ) {
             item {
                 ListItem(
-                    headlineContent = { Text("Theme") },
+                    headlineContent = { Text(stringResource(R.string.title_theme)) },
                     supportingContent = { Text(themeMode.label) },
                     modifier = Modifier.clickable {
                         val next = when (themeMode) {
@@ -573,8 +583,8 @@ fun SettingsScreen(
 
             item {
                 ListItem(
-                    headlineContent = { Text("Workplaces") },
-                    supportingContent = { Text("Manage server groups for multi-terminal") },
+                    headlineContent = { Text(stringResource(R.string.title_workplaces)) },
+                    supportingContent = { Text(stringResource(R.string.workplaces_supporting)) },
                     modifier = Modifier.clickable { onNavigateToWorkplaces() }
                 )
                 HorizontalDivider()
@@ -583,7 +593,7 @@ fun SettingsScreen(
             item {
                 Box {
                     ListItem(
-                        headlineContent = { Text("Color Scheme") },
+                        headlineContent = { Text(stringResource(R.string.title_color_scheme)) },
                         supportingContent = { Text(terminalSettings.colorScheme) },
                         modifier = Modifier.clickable { showColorSchemeMenu = true }
                     )
@@ -608,7 +618,7 @@ fun SettingsScreen(
             item {
                 Box {
                     ListItem(
-                        headlineContent = { Text("Font") },
+                        headlineContent = { Text(stringResource(R.string.title_font)) },
                         supportingContent = { Text(terminalSettings.fontFamily) },
                         modifier = Modifier.clickable { showFontMenu = true }
                     )
@@ -633,7 +643,7 @@ fun SettingsScreen(
             item {
                 Box {
                     ListItem(
-                        headlineContent = { Text("Font Size") },
+                        headlineContent = { Text(stringResource(R.string.title_font_size)) },
                         supportingContent = { Text("${terminalSettings.fontSize}pt") },
                         modifier = Modifier.clickable { showFontSizeMenu = true }
                     )
@@ -658,7 +668,7 @@ fun SettingsScreen(
             item {
                 Box {
                     ListItem(
-                        headlineContent = { Text("Keep-Alive Interval") },
+                        headlineContent = { Text(stringResource(R.string.title_keep_alive_interval)) },
                         supportingContent = { Text(keepAliveInterval.label) },
                         modifier = Modifier.clickable { showKeepAliveMenu = true }
                     )
@@ -682,7 +692,7 @@ fun SettingsScreen(
 
             item {
                 ListItem(
-                    headlineContent = { Text("Restore Purchases") },
+                    headlineContent = { Text(stringResource(R.string.action_restore_purchases)) },
                     modifier = Modifier.clickable { viewModel.restorePurchases() }
                 )
                 HorizontalDivider()
@@ -690,8 +700,8 @@ fun SettingsScreen(
 
             item {
                 ListItem(
-                    headlineContent = { Text("Reset App") },
-                    supportingContent = { Text("Show onboarding again") },
+                    headlineContent = { Text(stringResource(R.string.action_reset_app)) },
+                    supportingContent = { Text(stringResource(R.string.reset_app_supporting)) },
                     modifier = Modifier.clickable { showResetDialog = true }
                 )
                 HorizontalDivider()
@@ -699,9 +709,15 @@ fun SettingsScreen(
 
             item {
                 ListItem(
-                    headlineContent = { Text("Version") },
+                    headlineContent = { Text(stringResource(R.string.title_version)) },
                     supportingContent = {
-                        Text(if (demoModeEnabled) "1.0.0 (Demo)" else "1.0.0")
+                        val versionName = BuildConfig.VERSION_NAME
+                        val label = if (demoModeEnabled) {
+                            stringResource(R.string.version_demo_format, versionName)
+                        } else {
+                            versionName
+                        }
+                        Text(label)
                     },
                     modifier = Modifier.clickable { viewModel.onVersionTap() }
                 )
@@ -712,8 +728,8 @@ fun SettingsScreen(
     if (showResetDialog) {
         AlertDialog(
             onDismissRequest = { showResetDialog = false },
-            title = { Text("Reset App") },
-            text = { Text("This will reset the app and show the onboarding screen again. Your servers and data will be preserved.") },
+            title = { Text(stringResource(R.string.title_reset_app)) },
+            text = { Text(stringResource(R.string.reset_app_message)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -721,12 +737,12 @@ fun SettingsScreen(
                         showResetDialog = false
                     }
                 ) {
-                    Text("Reset")
+                    Text(stringResource(R.string.action_reset))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showResetDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )

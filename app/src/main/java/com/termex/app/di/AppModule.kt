@@ -29,7 +29,7 @@ object AppModule {
         return Room.databaseBuilder(
             context,
             TermexDatabase::class.java,
-            "termex-database"
+            TermexDatabase.DB_NAME
         )
             .addMigrations(*TermexDatabase.ALL_MIGRATIONS)
             .build()

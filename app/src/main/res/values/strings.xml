@@ -1,3 +1,63 @@
 <resources>
     <string name="app_name">Termex</string>
+
+    <!-- Navigation -->
+    <string name="nav_servers">Servers</string>
+    <string name="nav_keys">Keys</string>
+    <string name="nav_snippets">Snippets</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Servers -->
+    <string name="title_servers">Servers</string>
+    <string name="action_add_server">Add Server</string>
+    <string name="demo_mode_active">DEMO MODE ACTIVE</string>
+    <string name="demo_mode_message">Real server connections are disabled. For App Store review only.</string>
+    <string name="empty_servers">No servers. Tap + to add one.</string>
+    <string name="try_demo_server">Try Termex without a real server</string>
+    <string name="action_more">More</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_port_forwarding">Port Forwarding</string>
+    <string name="action_delete">Delete</string>
+
+    <!-- Keys -->
+    <string name="title_ssh_keys">SSH Keys</string>
+    <string name="action_add_key">Add Key</string>
+    <string name="action_generate_new_key">Generate New Key</string>
+    <string name="action_import_key">Import Key</string>
+    <string name="empty_ssh_keys">No SSH keys. Tap + to add one.</string>
+    <string name="title_generate_rsa_key">Generate RSA Key</string>
+    <string name="label_key_name_example">Key Name (e.g. id_rsa)</string>
+    <string name="action_generate">Generate</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="title_import_private_key">Import Private Key</string>
+    <string name="label_key_name">Key Name</string>
+    <string name="label_private_key_content">Private Key Content</string>
+    <string name="action_import">Import</string>
+
+    <!-- Snippets -->
+    <string name="title_snippets">Snippets</string>
+    <string name="action_add_snippet">Add Snippet</string>
+    <string name="empty_snippets">No snippets. Tap + to add one.</string>
+    <string name="title_add_snippet">Add Snippet</string>
+    <string name="label_name">Name</string>
+    <string name="label_command">Command</string>
+    <string name="action_save">Save</string>
+
+    <!-- Settings -->
+    <string name="title_settings">Settings</string>
+    <string name="title_theme">Theme</string>
+    <string name="title_workplaces">Workplaces</string>
+    <string name="workplaces_supporting">Manage server groups for multi-terminal</string>
+    <string name="title_color_scheme">Color Scheme</string>
+    <string name="title_font">Font</string>
+    <string name="title_font_size">Font Size</string>
+    <string name="title_keep_alive_interval">Keep-Alive Interval</string>
+    <string name="action_restore_purchases">Restore Purchases</string>
+    <string name="action_reset_app">Reset App</string>
+    <string name="reset_app_supporting">Show onboarding again</string>
+    <string name="title_version">Version</string>
+    <string name="title_reset_app">Reset App</string>
+    <string name="reset_app_message">This will reset the app and show the onboarding screen again. Your servers and data will be preserved.</string>
+    <string name="action_reset">Reset</string>
+    <string name="version_demo_format">%1$s (Demo)</string>
 </resources>

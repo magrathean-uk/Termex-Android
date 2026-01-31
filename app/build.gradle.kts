@@ -9,12 +9,19 @@ plugins {
     id("com.google.dagger.hilt.android")
 }
 
-// Load local.properties for signing config
-val localProperties = Properties().apply {
-    val localPropsFile = rootProject.file("local.properties")
-    if (localPropsFile.exists()) {
-        load(localPropsFile.inputStream())
+// Load keystore.properties for signing config (never commit this file)
+val keystoreProperties = Properties().apply {
+    val keystoreFile = rootProject.file("keystore.properties")
+    if (keystoreFile.exists()) {
+        load(keystoreFile.inputStream())
     }
+}
+
+fun signingProp(name: String): String? {
+    val fromFile = keystoreProperties.getProperty(name)?.trim().orEmpty()
+    if (fromFile.isNotEmpty()) return fromFile
+    val fromEnv = System.getenv(name)?.trim().orEmpty()
+    return fromEnv.ifEmpty { null }
 }
 
 android {
@@ -36,10 +43,10 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file(localProperties.getProperty("RELEASE_STORE_FILE", ""))
-            storePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD", "")
-            keyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS", "")
-            keyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD", "")
+            signingProp("RELEASE_STORE_FILE")?.let { storeFile = file(it) }
+            signingProp("RELEASE_STORE_PASSWORD")?.let { storePassword = it }
+            signingProp("RELEASE_KEY_ALIAS")?.let { keyAlias = it }
+            signingProp("RELEASE_KEY_PASSWORD")?.let { keyPassword = it }
         }
     }
 

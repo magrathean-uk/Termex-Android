@@ -1,12 +1,16 @@
 package com.termex.app.data.local
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.termex.app.domain.AuthMode
 import com.termex.app.domain.PortForward
 import com.termex.app.domain.Server
 
-@Entity(tableName = "servers")
+@Entity(
+    tableName = "servers",
+    indices = [Index(value = ["workplaceId"])]
+)
 data class ServerEntity(
     @PrimaryKey val id: String,
     val name: String,
