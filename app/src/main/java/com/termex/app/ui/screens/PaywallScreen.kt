@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -305,7 +306,7 @@ fun PaywallScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(
-                                            imageVector = androidx.compose.material.icons.Icons.Default.Star,
+                                            imageVector = Icons.Default.Star,
                                             contentDescription = null,
                                             modifier = Modifier.size(16.dp),
                                             tint = Color.Black
