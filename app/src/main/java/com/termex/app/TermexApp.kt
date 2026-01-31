@@ -7,6 +7,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -59,7 +64,23 @@ fun TermexApp(
     
     NavHost(
         navController = navController,
-        startDestination = startDestination
+        startDestination = startDestination,
+        enterTransition = { 
+            slideInHorizontally(initialOffsetX = { 300 }, animationSpec = tween(350)) + 
+            fadeIn(animationSpec = tween(350)) 
+        },
+        exitTransition = { 
+            slideOutHorizontally(targetOffsetX = { -300 }, animationSpec = tween(350)) + 
+            fadeOut(animationSpec = tween(200)) 
+        },
+        popEnterTransition = { 
+            slideInHorizontally(initialOffsetX = { -300 }, animationSpec = tween(350)) + 
+            fadeIn(animationSpec = tween(350)) 
+        },
+        popExitTransition = { 
+            slideOutHorizontally(targetOffsetX = { 300 }, animationSpec = tween(350)) + 
+            fadeOut(animationSpec = tween(200)) 
+        }
     ) {
         composable(Route.Onboarding.route) {
             OnboardingFlow(

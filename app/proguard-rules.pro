@@ -12,11 +12,15 @@
     @androidx.room.* <methods>;
 }
 
-# Keep SSHJ
+# Keep SSHJ (legacy, may be removed)
 -keep class net.schmizz.sshj.** { *; }
 -keep class com.hierynomus.** { *; }
 -dontwarn net.schmizz.sshj.**
 -dontwarn com.hierynomus.**
+
+# Keep Apache MINA SSHD
+-keep class org.apache.sshd.** { *; }
+-dontwarn org.apache.sshd.**
 
 # Keep BouncyCastle
 -keep class org.bouncycastle.** { *; }
@@ -30,6 +34,14 @@
 -dontwarn sun.security.x509.X509Key
 -dontwarn sun.security.**
 
+# Suppress javax.security.auth warnings (not available on Android)
+-dontwarn javax.security.auth.login.CredentialException
+-dontwarn javax.security.auth.login.FailedLoginException
+-dontwarn javax.security.auth.**
+
+# Suppress SLF4J logging warnings
+-dontwarn org.slf4j.**
+
 # Keep Billing
 -keep class com.android.billingclient.** { *; }
 
@@ -42,3 +54,4 @@
 -keep class com.termex.app.core.ssh.SSHConnectionState$* { *; }
 -keep class com.termex.app.core.billing.SubscriptionState { *; }
 -keep class com.termex.app.core.billing.SubscriptionState$* { *; }
+

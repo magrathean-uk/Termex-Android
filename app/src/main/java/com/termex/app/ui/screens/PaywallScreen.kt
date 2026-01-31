@@ -2,21 +2,44 @@ package com.termex.app.ui.screens
 
 import android.app.Activity
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -30,15 +53,29 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.android.billingclient.api.ProductDetails
 import com.termex.app.R
 import com.termex.app.core.billing.SubscriptionManager
 import com.termex.app.core.billing.SubscriptionState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+// Premium gradient colors
+private val GradientStart = Color(0xFF1A1A2E)
+private val GradientMid = Color(0xFF16213E)
+private val GradientEnd = Color(0xFF0F3460)
+private val AccentGold = Color(0xFFFFD700)
+private val AccentTeal = Color(0xFF00D4AA)
 
 @Composable
 fun PaywallScreen(
@@ -51,9 +88,9 @@ fun PaywallScreen(
     val subscriptionState by subscriptionManager.subscriptionState.collectAsState()
     val scope = rememberCoroutineScope()
     
-    // Product details for dynamic pricing
     var productDetails by remember { mutableStateOf<ProductDetails?>(null) }
     var isLoadingPrice by remember { mutableStateOf(true) }
+    var showContent by remember { mutableStateOf(false) }
 
     val loadProductDetails: () -> Unit = {
         scope.launch {
@@ -63,19 +100,17 @@ fun PaywallScreen(
         }
     }
 
-    // Fetch product details on launch
     LaunchedEffect(Unit) {
         loadProductDetails()
+        delay(100)
+        showContent = true
     }
     
-    // CRITICAL: Block back button - paywall CANNOT be skipped
-    // Users MUST subscribe or restore purchases to proceed
+    // Block back button - paywall CANNOT be skipped
     BackHandler(enabled = true) {
-        // Do nothing - intentionally blocking back navigation
-        // The paywall is mandatory and cannot be bypassed
+        // Intentionally blocking back navigation - paywall is mandatory
     }
     
-    // Navigate when subscribed
     LaunchedEffect(subscriptionState) {
         if (subscriptionState is SubscriptionState.SUBSCRIBED) {
             onSubscribed()
@@ -86,137 +121,337 @@ fun PaywallScreen(
         buildPricingInfo(productDetails)
     }
     
-    Scaffold { padding ->
+    // Pulsing animation for the subscribe button
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.02f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseScale"
+    )
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(GradientStart, GradientMid, GradientEnd)
+                )
+            )
+    ) {
         Column(
             modifier = Modifier
-                .padding(padding)
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Image(
-                painter = painterResource(id = R.mipmap.ic_launcher),
-                contentDescription = "Termex app icon",
-                modifier = Modifier
-                    .size(72.dp)
-                    .clip(RoundedCornerShape(16.dp))
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "Termex Pro",
-                style = MaterialTheme.typography.headlineLarge
-            )
+            Spacer(modifier = Modifier.height(40.dp))
             
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Text(
-                text = "Unlock unlimited SSH connections, snippets, and more.",
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.bodyLarge
-            )
-            
-            Spacer(modifier = Modifier.height(32.dp))
-            
-            // Features list
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.Start
-            ) {
-                FeatureItem("✓ Unlimited server connections")
-                FeatureItem("✓ SSH key management")
-                FeatureItem("✓ Command snippets")
-                FeatureItem("✓ Custom themes")
-                FeatureItem("✓ Priority support")
-            }
-            
-            Spacer(modifier = Modifier.height(32.dp))
-            
-            // Dynamic pricing from Google Play
-            when {
-                isLoadingPrice -> {
-                    CircularProgressIndicator(modifier = Modifier.height(24.dp))
-                }
-                productDetails == null -> {
-                    Text(
-                        text = "Unable to load subscription details.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center
-                    )
-                    TextButton(onClick = loadProductDetails) {
-                        Text("Tap to retry")
-                    }
-                }
-                else -> {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        pricingInfo.trialText?.let { trialText ->
-                            Text(
-                                text = trialText,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                        }
-                        pricingInfo.priceText?.let { priceText ->
-                            Text(
-                                text = priceText,
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                        }
-                        Text(
-                            text = "Cancel anytime in Settings",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = {
-                    scope.launch {
-                        val details = productDetails ?: subscriptionManager.getProductDetails()
-                        if (details != null && activity != null) {
-                            subscriptionManager.launchSubscriptionFlow(activity, details)
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = productDetails != null
+            // Animated Logo
+            AnimatedVisibility(
+                visible = showContent,
+                enter = fadeIn(tween(600)) + slideInVertically(
+                    initialOffsetY = { -50 },
+                    animationSpec = tween(600)
+                )
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(pricingInfo.buttonTitle)
-                    pricingInfo.buttonSubtext?.let { subtext ->
-                        Text(
-                            text = subtext,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                    Box(
+                        modifier = Modifier
+                            .size(100.dp)
+                            .shadow(16.dp, CircleShape)
+                            .clip(RoundedCornerShape(24.dp))
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.mipmap.ic_launcher),
+                            contentDescription = "Termex app icon",
+                            modifier = Modifier.fillMaxSize()
                         )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(20.dp))
+                    
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "Termex",
+                            style = MaterialTheme.typography.headlineLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 32.sp
+                            ),
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = AccentGold
+                        ) {
+                            Text(
+                                text = "PRO",
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
+                                color = Color.Black
+                            )
+                        }
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            OutlinedButton(
-                onClick = onRestore,
-                modifier = Modifier.fillMaxWidth()
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Tagline
+            AnimatedVisibility(
+                visible = showContent,
+                enter = fadeIn(tween(600, delayMillis = 200))
             ) {
-                Text("Restore Purchases")
+                Text(
+                    text = "Professional SSH Terminal\nfor Android",
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Medium
+                    ),
+                    color = Color.White.copy(alpha = 0.9f)
+                )
             }
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // Features Card
+            AnimatedVisibility(
+                visible = showContent,
+                enter = fadeIn(tween(600, delayMillis = 400)) + slideInVertically(
+                    initialOffsetY = { 50 },
+                    animationSpec = tween(600, delayMillis = 400)
+                )
+            ) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.White.copy(alpha = 0.08f)
+                    ),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp)
+                    ) {
+                        Text(
+                            text = "Everything Included",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = AccentTeal
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        PremiumFeatureItem("Unlimited server connections")
+                        PremiumFeatureItem("SSH key generation & import")
+                        PremiumFeatureItem("Command snippets library")
+                        PremiumFeatureItem("Port forwarding (Local, Remote, Dynamic)")
+                        PremiumFeatureItem("Multi-terminal workplaces")
+                        PremiumFeatureItem("Host key verification & security")
+                        PremiumFeatureItem("Jump host / bastion support")
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // Pricing Section
+            AnimatedVisibility(
+                visible = showContent,
+                enter = fadeIn(tween(600, delayMillis = 600))
+            ) {
+                when {
+                    isLoadingPrice -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(32.dp),
+                            color = AccentTeal
+                        )
+                    }
+                    productDetails == null -> {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Unable to load subscription details",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.7f),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            TextButton(onClick = loadProductDetails) {
+                                Text("Tap to retry", color = AccentTeal)
+                            }
+                        }
+                    }
+                    else -> {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            // Trial badge
+                            pricingInfo.trialText?.let { trialText ->
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = AccentGold,
+                                    modifier = Modifier.padding(bottom = 12.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = androidx.compose.material.icons.Icons.Default.Star,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = Color.Black
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = trialText.uppercase(),
+                                            style = MaterialTheme.typography.labelMedium.copy(
+                                                fontWeight = FontWeight.Bold
+                                            ),
+                                            color = Color.Black
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            pricingInfo.priceText?.let { priceText ->
+                                Text(
+                                    text = priceText,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
+                            }
+                            
+                            Text(
+                                text = "Cancel anytime • No commitment",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(28.dp))
+            
+            // Subscribe Button
+            AnimatedVisibility(
+                visible = showContent,
+                enter = fadeIn(tween(600, delayMillis = 800)) + slideInVertically(
+                    initialOffsetY = { 30 },
+                    animationSpec = tween(600, delayMillis = 800)
+                )
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                val details = productDetails ?: subscriptionManager.getProductDetails()
+                                if (details != null && activity != null) {
+                                    subscriptionManager.launchSubscriptionFlow(activity, details)
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .scale(if (productDetails != null) pulseScale else 1f),
+                        enabled = productDetails != null,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AccentTeal,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 8.dp,
+                            pressedElevation = 4.dp
+                        )
+                    ) {
+                        Text(
+                            text = pricingInfo.buttonTitle,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    OutlinedButton(
+                        onClick = onRestore,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color.White.copy(alpha = 0.8f)
+                        )
+                    ) {
+                        Text("Restore Purchases")
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Footer
+            AnimatedVisibility(
+                visible = showContent,
+                enter = fadeIn(tween(600, delayMillis = 1000))
+            ) {
+                Text(
+                    text = "Subscription will be charged to your Google Play account. Subscription automatically renews unless auto-renew is turned off at least 24 hours before the end of the current period.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.4f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
 
 @Composable
-private fun FeatureItem(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.padding(vertical = 4.dp)
-    )
+private fun PremiumFeatureItem(text: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = AccentTeal.copy(alpha = 0.2f),
+            modifier = Modifier.size(24.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                modifier = Modifier
+                    .padding(4.dp)
+                    .size(16.dp),
+                tint = AccentTeal
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.White.copy(alpha = 0.9f)
+        )
+    }
 }
 
 private data class PricingInfo(
@@ -229,8 +464,8 @@ private data class PricingInfo(
 private fun buildPricingInfo(productDetails: ProductDetails?): PricingInfo {
     if (productDetails == null) {
         return PricingInfo(
-            trialText = null,
-            priceText = null,
+            trialText = "7-day free trial",
+            priceText = "$9.99/month after trial",
             buttonTitle = "Start Free Trial",
             buttonSubtext = null
         )
@@ -254,14 +489,13 @@ private fun buildPricingInfo(productDetails: ProductDetails?): PricingInfo {
         }
     }
 
-    val buttonTitle = if (trialPhase != null) "Start Free Trial" else "Subscribe"
-    val buttonSubtext = null
+    val buttonTitle = if (trialPhase != null) "Start Free Trial" else "Subscribe Now"
 
     return PricingInfo(
         trialText = trialText,
         priceText = priceText,
         buttonTitle = buttonTitle,
-        buttonSubtext = buttonSubtext
+        buttonSubtext = null
     )
 }
 
@@ -303,12 +537,12 @@ private fun formatTrialPeriod(period: String): String? {
 }
 
 private fun formatBillingPeriod(period: String): String {
-    val parts = parsePeriod(period) ?: return "year"
+    val parts = parsePeriod(period) ?: return "month"
     return when {
         parts.years > 0 -> if (parts.years == 1) "year" else "${parts.years} years"
         parts.months > 0 -> if (parts.months == 1) "month" else "${parts.months} months"
         parts.weeks > 0 -> if (parts.weeks == 1) "week" else "${parts.weeks} weeks"
         parts.days > 0 -> if (parts.days == 1) "day" else "${parts.days} days"
-        else -> "year"
+        else -> "month"
     }
 }
