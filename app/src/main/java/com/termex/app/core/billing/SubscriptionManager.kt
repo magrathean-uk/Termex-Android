@@ -2,9 +2,10 @@ package com.termex.app.core.billing
 
 import android.app.Activity
 import android.content.Context
-import android.util.Log
 import com.android.billingclient.api.*
 import dagger.hilt.android.qualifiers.ApplicationContext
+import android.os.Handler
+import android.os.Looper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,6 +13,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
+import kotlin.math.min
 
 @Singleton
 class SubscriptionManager @Inject constructor(
@@ -21,26 +23,10 @@ class SubscriptionManager @Inject constructor(
     private val billingClient: BillingClient
     private val _subscriptionState = MutableStateFlow<SubscriptionState>(SubscriptionState.LOADING)
     val subscriptionState: StateFlow<SubscriptionState> = _subscriptionState.asStateFlow()
-    
-    companion object {
-        private const val TAG = "SubscriptionManager"
-        const val PRODUCT_ID = "termex_pro_subscription"
-        
-        // Keep static instance for PaywallScreen access (temporary compatibility)
-        @Volatile
-        private var instance: SubscriptionManager? = null
-        
-        fun getInstance(context: Context): SubscriptionManager {
-            return instance ?: synchronized(this) {
-                instance ?: SubscriptionManager(context.applicationContext).also {
-                    instance = it
-                }
-            }
-        }
-    }
+    private var reconnectAttempts = 0
+    private val handler = Handler(Looper.getMainLooper())
     
     init {
-        instance = this
         
         billingClient = BillingClient.newBuilder(context)
             .setListener { billingResult, purchases ->
@@ -60,25 +46,31 @@ class SubscriptionManager @Inject constructor(
     private fun startConnection() {
         billingClient.startConnection(object : BillingClientStateListener {
             override fun onBillingSetupFinished(billingResult: BillingResult) {
+                reconnectAttempts = 0
                 if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                    Log.i(TAG, "Billing client connected")
                     querySubscriptionStatus()
                 } else {
-                    Log.e(TAG, "Billing setup failed: ${billingResult.debugMessage}")
-                    _subscriptionState.value = SubscriptionState.ERROR("Setup failed")
+                    _subscriptionState.value = SubscriptionState.ERROR("Billing setup failed. Please try again later.")
                 }
             }
             
             override fun onBillingServiceDisconnected() {
-                Log.w(TAG, "Billing service disconnected")
-                startConnection()
+                if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    val delayMs = min(1000L shl reconnectAttempts, 32_000L)
+                    reconnectAttempts++
+                    handler.postDelayed({ startConnection() }, delayMs)
+                }
             }
         })
+    }
+
+    companion object {
+        const val PRODUCT_ID = "termex_pro_subscription"
+        private const val MAX_RECONNECT_ATTEMPTS = 5
     }
     
     fun querySubscriptionStatus() {
         if (!billingClient.isReady) {
-            Log.w(TAG, "Billing client not ready")
             return
         }
         
@@ -102,7 +94,6 @@ class SubscriptionManager @Inject constructor(
                     _subscriptionState.value = SubscriptionState.NOT_SUBSCRIBED
                 }
             } else {
-                Log.e(TAG, "Query purchases failed: ${billingResult.debugMessage}")
                 _subscriptionState.value = SubscriptionState.ERROR(billingResult.debugMessage)
             }
         }
@@ -110,7 +101,6 @@ class SubscriptionManager @Inject constructor(
     
     suspend fun getProductDetails(): ProductDetails? = suspendCancellableCoroutine { continuation ->
         if (!billingClient.isReady) {
-            Log.w(TAG, "Billing client not ready")
             continuation.resume(null)
             return@suspendCancellableCoroutine
         }
@@ -130,7 +120,6 @@ class SubscriptionManager @Inject constructor(
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
                 continuation.resume(productDetailsList.firstOrNull())
             } else {
-                Log.e(TAG, "Query product details failed: ${billingResult.debugMessage}")
                 continuation.resume(null)
             }
         }
@@ -182,7 +171,6 @@ class SubscriptionManager @Inject constructor(
         
         billingClient.acknowledgePurchase(params) { billingResult ->
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                Log.i(TAG, "Purchase acknowledged")
             }
         }
     }

@@ -11,10 +11,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ServerEntity::class,
         WorkplaceEntity::class,
         SnippetEntity::class,
-        KnownHostEntity::class
+        KnownHostEntity::class,
+        SessionStateEntity::class
     ],
-    version = 7,
-    exportSchema = false
+    version = 8,
+    exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class TermexDatabase : RoomDatabase() {
@@ -22,6 +23,7 @@ abstract class TermexDatabase : RoomDatabase() {
     abstract fun workplaceDao(): WorkplaceDao
     abstract fun snippetDao(): SnippetDao
     abstract fun knownHostDao(): KnownHostDao
+    abstract fun sessionStateDao(): SessionStateDao
 
     companion object {
         const val DB_NAME = "termex-database"
@@ -77,13 +79,31 @@ abstract class TermexDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS session_states (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        serverId TEXT NOT NULL,
+                        terminalBuffer TEXT NOT NULL,
+                        workingDirectory TEXT,
+                        connectedAt INTEGER NOT NULL,
+                        lastActiveAt INTEGER NOT NULL
+                    )
+                """)
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_session_states_serverId ON session_states (serverId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_session_states_lastActiveAt ON session_states (lastActiveAt)")
+            }
+        }
+
         val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
             MIGRATION_3_4,
             MIGRATION_4_5,
             MIGRATION_5_6,
-            MIGRATION_6_7
+            MIGRATION_6_7,
+            MIGRATION_7_8
         )
     }
 }

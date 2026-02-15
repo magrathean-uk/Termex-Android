@@ -35,6 +35,10 @@ externalNativeBuild/
 # Kotlin
 *.class
 
+# Backup files
+*.bak
+*.finalbak
+
 # Keystore files
 *.jks
 *.keystore

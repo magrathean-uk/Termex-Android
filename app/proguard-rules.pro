@@ -12,18 +12,15 @@
     @androidx.room.* <methods>;
 }
 
-# Keep SSHJ (legacy, may be removed)
--keep class net.schmizz.sshj.** { *; }
--keep class com.hierynomus.** { *; }
--dontwarn net.schmizz.sshj.**
--dontwarn com.hierynomus.**
-
 # Keep Apache MINA SSHD
 -keep class org.apache.sshd.** { *; }
 -dontwarn org.apache.sshd.**
 
-# Keep BouncyCastle
--keep class org.bouncycastle.** { *; }
+# Keep BouncyCastle (optimize - only keep what's needed)
+-keep class org.bouncycastle.jce.provider.BouncyCastleProvider
+-keep class org.bouncycastle.jcajce.provider.** { *; }
+-keep class org.bouncycastle.crypto.** { *; }
+-dontwarn org.bouncycastle.jsse.**
 -dontwarn org.bouncycastle.**
 
 # Keep EdDSA

@@ -31,6 +31,7 @@ class UserPreferencesRepository @Inject constructor(
         private val KEY_ONBOARDING_COMPLETE = stringPreferencesKey("onboarding_complete")
         private val KEY_KEEP_ALIVE_INTERVAL = intPreferencesKey("keep_alive_interval")
         private val KEY_DEMO_MODE_ENABLED = booleanPreferencesKey("demo_mode_enabled")
+        private val KEY_BIOMETRIC_LOCK_ENABLED = booleanPreferencesKey("biometric_lock_enabled")
     }
 
     val themeFlow: Flow<ThemeMode> = dataStore.data.map { prefs ->
@@ -58,6 +59,10 @@ class UserPreferencesRepository @Inject constructor(
 
     val demoModeEnabledFlow: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[KEY_DEMO_MODE_ENABLED] ?: false
+    }
+
+    val biometricLockEnabledFlow: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_BIOMETRIC_LOCK_ENABLED] ?: false
     }
 
     suspend fun setThemeMode(mode: ThemeMode) {
@@ -95,6 +100,12 @@ class UserPreferencesRepository @Inject constructor(
     suspend fun resetOnboarding() {
         dataStore.edit { prefs ->
             prefs[KEY_ONBOARDING_COMPLETE] = "false"
+        }
+    }
+
+    suspend fun setBiometricLockEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[KEY_BIOMETRIC_LOCK_ENABLED] = enabled
         }
     }
 }

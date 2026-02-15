@@ -165,9 +165,19 @@ class SSHClient @Inject constructor(
             _connectionState.value = SSHConnectionState.Connected
             Result.success(Unit)
         } catch (e: Exception) {
-            // Error handled via state - no stack trace in production
             cleanupConnection() // Cleanup without overwriting error state
-            _connectionState.value = SSHConnectionState.Error(e.message ?: "Connection failed")
+            val errorMsg = when {
+                e.message?.contains("authentication", ignoreCase = true) == true -> 
+                    "Authentication failed. Please check your username and password/key."
+                e.message?.contains("timeout", ignoreCase = true) == true -> 
+                    "Connection timed out. Please check your network and server address."
+                e.message?.contains("refused", ignoreCase = true) == true -> 
+                    "Connection refused. Please verify the server is running and accepting connections."
+                e.message?.contains("host key", ignoreCase = true) == true -> 
+                    "Host key verification failed. The server's identity may have changed."
+                else -> e.message ?: "Connection failed"
+            }
+            _connectionState.value = SSHConnectionState.Error(errorMsg)
             Result.failure(e)
         }
     }

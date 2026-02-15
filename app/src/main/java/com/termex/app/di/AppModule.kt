@@ -56,6 +56,11 @@ object AppModule {
     }
 
     @Provides
+    fun provideSessionStateDao(database: TermexDatabase): com.termex.app.data.local.SessionStateDao {
+        return database.sessionStateDao()
+    }
+
+    @Provides
     @Singleton
     fun provideDataStore(@ApplicationContext context: Context): DataStore<Preferences> {
         return context.dataStore

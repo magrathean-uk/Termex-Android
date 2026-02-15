@@ -64,10 +64,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.android.billingclient.api.ProductDetails
 import com.termex.app.R
-import com.termex.app.core.billing.SubscriptionManager
 import com.termex.app.core.billing.SubscriptionState
+import com.termex.app.ui.viewmodel.AppViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -83,10 +84,10 @@ fun PaywallScreen(
     onSubscribed: () -> Unit,
     onRestore: () -> Unit
 ) {
+    val appViewModel: AppViewModel = hiltViewModel()
     val context = LocalContext.current
     val activity = context as? Activity
-    val subscriptionManager = SubscriptionManager.getInstance(context)
-    val subscriptionState by subscriptionManager.subscriptionState.collectAsState()
+    val subscriptionState by appViewModel.subscriptionState.collectAsState()
     val scope = rememberCoroutineScope()
     
     var productDetails by remember { mutableStateOf<ProductDetails?>(null) }
@@ -96,7 +97,7 @@ fun PaywallScreen(
     val loadProductDetails: () -> Unit = {
         scope.launch {
             isLoadingPrice = true
-            productDetails = subscriptionManager.getProductDetails()
+            productDetails = appViewModel.getProductDetails()
             isLoadingPrice = false
         }
     }
@@ -359,9 +360,9 @@ fun PaywallScreen(
                     Button(
                         onClick = {
                             scope.launch {
-                                val details = productDetails ?: subscriptionManager.getProductDetails()
+                                val details = productDetails ?: appViewModel.getProductDetails()
                                 if (details != null && activity != null) {
-                                    subscriptionManager.launchSubscriptionFlow(activity, details)
+                                    appViewModel.launchSubscriptionFlow(activity, details)
                                 }
                             }
                         },

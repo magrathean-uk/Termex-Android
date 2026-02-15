@@ -46,4 +46,11 @@ class AppViewModel @Inject constructor(
     fun refreshSubscription() {
         subscriptionManager.querySubscriptionStatus()
     }
+    
+    // Expose subscription methods
+    suspend fun getProductDetails() = subscriptionManager.getProductDetails()
+    
+    suspend fun launchSubscriptionFlow(activity: android.app.Activity, productDetails: com.android.billingclient.api.ProductDetails) {
+        subscriptionManager.launchSubscriptionFlow(activity, productDetails)
+    }
 }

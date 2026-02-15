@@ -3,6 +3,7 @@ package com.termex.app.core.ssh
 import com.termex.app.domain.KnownHost
 import com.termex.app.domain.KnownHostRepository
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.apache.sshd.client.keyverifier.ServerKeyVerifier
 import org.apache.sshd.client.session.ClientSession
 import java.net.InetSocketAddress
@@ -80,7 +81,9 @@ class TermexHostKeyVerifier @Inject constructor(
         if (serverKey == null) return false
         val (hostname, port) = resolveTarget(remoteAddress)
         return runBlocking {
-            verifyAsync(hostname, port, serverKey)
+            withTimeout(120_000L) {
+                verifyAsync(hostname, port, serverKey)
+            }
         }
     }
 

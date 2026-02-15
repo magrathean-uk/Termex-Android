@@ -29,7 +29,8 @@ class TerminalViewModel @Inject constructor(
     private val sshClient: SSHClient,
     private val serverRepository: ServerRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
-    private val sshConfigBuilder: SshConfigBuilder
+    private val sshConfigBuilder: SshConfigBuilder,
+    private val sessionRepository: com.termex.app.data.repository.SessionRepository
 ) : ViewModel() {
 
     private val _connectionState = MutableStateFlow<SSHConnectionState>(SSHConnectionState.Disconnected)
@@ -199,6 +200,15 @@ class TerminalViewModel @Inject constructor(
         val result = sshClient.connect(config)
         
         if (result.isSuccess) {
+            // Try to restore previous session state
+            _currentServer.value?.let { server ->
+                val restored = restoreSessionState(server.id)
+                if (restored != null) {
+                    // Session restored - terminal buffer already populated
+                } else {
+                    // No saved session - fresh connection
+                }
+            }
             startReading()
         }
     }
@@ -277,6 +287,54 @@ class TerminalViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         sshClient.setHostKeyVerificationCallback(null)
+        
+        // Save session state before clearing
+        _currentServer.value?.let { server ->
+            saveSessionState(server.id)
+        }
+        
         disconnect()
+    }
+    
+    private fun saveSessionState(serverId: String) {
+        viewModelScope.launch {
+            try {
+                val buffer = terminalBuffer.contentFlow.value
+                    .takeLast(500) // Save last 500 lines
+                    .joinToString("\n") { line ->
+                        line.cells.joinToString("") { it.char.toString() }
+                    }
+                
+                val sessionState = com.termex.app.domain.SessionState(
+                    id = java.util.UUID.randomUUID().toString(),
+                    serverId = serverId,
+                    terminalBuffer = buffer,
+                    workingDirectory = null,
+                    connectedAt = System.currentTimeMillis(),
+                    lastActiveAt = System.currentTimeMillis()
+                )
+                
+                sessionRepository.saveSession(sessionState)
+            } catch (e: Exception) {
+                // Failed to save - not critical
+            }
+        }
+    }
+    
+    suspend fun restoreSessionState(serverId: String): com.termex.app.domain.SessionState? {
+        return try {
+            val session = sessionRepository.getLatestSessionForServer(serverId)
+            session?.let {
+                // Restore terminal buffer
+                terminalBuffer.write(it.terminalBuffer)
+            }
+            session
+        } catch (e: Exception) {
+            null
+        }
+    }
+    
+    suspend fun clearAllSessions() {
+        sessionRepository.deleteAllSessions()
     }
 }

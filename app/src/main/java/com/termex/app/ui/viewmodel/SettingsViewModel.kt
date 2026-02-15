@@ -20,7 +20,9 @@ import javax.inject.Inject
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
-    private val subscriptionManager: SubscriptionManager
+    private val subscriptionManager: SubscriptionManager,
+    val biometricAuthManager: com.termex.app.core.security.BiometricAuthManager,
+    private val sessionRepository: com.termex.app.data.repository.SessionRepository
 ) : ViewModel() {
 
     val themeMode: StateFlow<ThemeMode> = userPreferencesRepository.themeFlow
@@ -33,6 +35,9 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Lazily, KeepAliveInterval.SECONDS_30)
 
     val demoModeEnabled: StateFlow<Boolean> = userPreferencesRepository.demoModeEnabledFlow
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    val biometricLockEnabled: StateFlow<Boolean> = userPreferencesRepository.biometricLockEnabledFlow
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
     val subscriptionState: StateFlow<SubscriptionState> = subscriptionManager.subscriptionState
@@ -99,6 +104,27 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             userPreferencesRepository.resetOnboarding()
             userPreferencesRepository.setDemoModeEnabled(false)
+            sessionRepository.deleteAllSessions()
+        }
+    }
+
+    fun setBiometricLockEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setBiometricLockEnabled(enabled)
+        }
+    }
+    
+    fun clearSavedSessions() {
+        viewModelScope.launch {
+            sessionRepository.deleteAllSessions()
+        }
+    }
+    
+    init {
+        // Cleanup old sessions (older than 7 days)
+        viewModelScope.launch {
+            val sevenDays = 7 * 24 * 60 * 60 * 1000L
+            sessionRepository.cleanupOldSessions(sevenDays)
         }
     }
 }
