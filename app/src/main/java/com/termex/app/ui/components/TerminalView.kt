@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -37,6 +38,7 @@ fun TerminalView(
     foregroundColor: Color = Color(0xFFE5E5E5),
     cursorColor: Color = Color(0xFFE5E5E5),
     onTap: () -> Unit = {},
+    onScroll: (deltaLines: Int) -> Unit = {},
     onSizeChanged: (cols: Int, rows: Int, widthPx: Int, heightPx: Int) -> Unit = { _, _, _, _ -> }
 ) {
     val density = LocalDensity.current
@@ -53,15 +55,32 @@ fun TerminalView(
     }
     
     val effectiveFontSize = fontSize * scale
-    val charWidthPx = with(density) { (effectiveFontSize * 0.6f).sp.toPx() }
-    val lineHeightPx = with(density) { (effectiveFontSize * 1.2f).sp.toPx() }
+    val charWidthPx = remember(effectiveFontSize) {
+        with(density) { (effectiveFontSize * 0.6f).sp.toPx() }
+    }
+    val lineHeightPx = remember(effectiveFontSize) {
+        with(density) { (effectiveFontSize * 1.2f).sp.toPx() }
+    }
     
-    val paint = remember(effectiveFontSize) {
+    // Cache paint objects per style to avoid mutation during draw
+    val basePaint = remember(effectiveFontSize) {
         android.graphics.Paint().apply {
             isAntiAlias = true
             textSize = with(density) { effectiveFontSize.sp.toPx() }
             typeface = android.graphics.Typeface.MONOSPACE
         }
+    }
+    val normalPaint = remember(effectiveFontSize) {
+        android.graphics.Paint(basePaint).apply { isFakeBoldText = false; textSkewX = 0f }
+    }
+    val boldPaint = remember(effectiveFontSize) {
+        android.graphics.Paint(basePaint).apply { isFakeBoldText = true; textSkewX = 0f }
+    }
+    val italicPaint = remember(effectiveFontSize) {
+        android.graphics.Paint(basePaint).apply { isFakeBoldText = false; textSkewX = -0.25f }
+    }
+    val boldItalicPaint = remember(effectiveFontSize) {
+        android.graphics.Paint(basePaint).apply { isFakeBoldText = true; textSkewX = -0.25f }
     }
 
     LaunchedEffect(viewSize, effectiveFontSize) {
@@ -87,16 +106,39 @@ fun TerminalView(
                     scale = (scale * zoom).coerceIn(0.5f, 3f)
                 }
             }
+            .pointerInput(lineHeightPx) {
+                var accumulatedDrag = 0f
+                detectVerticalDragGestures { _, dragAmount ->
+                    accumulatedDrag += dragAmount
+                    val linesDragged = (accumulatedDrag / lineHeightPx).toInt()
+                    if (linesDragged != 0) {
+                        onScroll(-linesDragged) // negative = scroll up (drag down), positive = scroll down
+                        accumulatedDrag -= linesDragged * lineHeightPx
+                    }
+                }
+            }
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val scaledCharWidth = charWidthPx
             val scaledLineHeight = lineHeightPx
             
-            lines.forEachIndexed { lineIndex, line ->
+            // Viewport culling: only draw visible lines
+            val visibleRows = (size.height / scaledLineHeight).toInt() + 1
+            val startLine = 0
+            val endLine = minOf(lines.size, visibleRows)
+            
+            for (lineIndex in startLine until endLine) {
+                val line = lines[lineIndex]
                 var x = 0f
                 val y = lineIndex * scaledLineHeight + scaledLineHeight
                 
+                // Skip lines entirely below viewport
+                if (y - scaledLineHeight > size.height) break
+                
                 line.cells.forEachIndexed { cellIndex, cell ->
+                    // Skip cells beyond viewport width
+                    if (x > size.width) return@forEachIndexed
+                    
                     // Draw background if not default
                     if (cell.style.bgColor != AnsiParser.DEFAULT_BG) {
                         drawRect(
@@ -106,17 +148,22 @@ fun TerminalView(
                         )
                     }
                     
+                    // Select cached paint by style
+                    val paint = when {
+                        cell.style.bold && cell.style.italic -> boldItalicPaint
+                        cell.style.bold -> boldPaint
+                        cell.style.italic -> italicPaint
+                        else -> normalPaint
+                    }
+                    
                     // Draw character
                     val textColor = if (cell.style.inverse) cell.style.bgColor else cell.style.fgColor
+                    paint.color = textColor.toArgb()
                     drawContext.canvas.nativeCanvas.drawText(
                         cell.char.toString(),
                         x,
                         y,
-                        paint.apply {
-                            color = textColor.toArgb()
-                            isFakeBoldText = cell.style.bold
-                            textSkewX = if (cell.style.italic) -0.25f else 0f
-                        }
+                        paint
                     )
                     
                     // Draw underline
@@ -132,16 +179,17 @@ fun TerminalView(
                     // Draw cursor
                     if (showCursor && lineIndex == cursorPosition.second && cellIndex == cursorPosition.first) {
                         drawRect(
-                            color = Color(0xFFE5E5E5),
+                            color = cursorColor,
                             topLeft = Offset(x, y - scaledLineHeight + 4),
                             size = androidx.compose.ui.geometry.Size(scaledCharWidth, scaledLineHeight)
                         )
                         // Redraw character on cursor with inverted color
+                        paint.color = android.graphics.Color.BLACK
                         drawContext.canvas.nativeCanvas.drawText(
                             cell.char.toString(),
                             x,
                             y,
-                            paint.apply { color = android.graphics.Color.BLACK }
+                            paint
                         )
                     }
                     

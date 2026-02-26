@@ -123,11 +123,14 @@ class KeyRepositoryImpl @Inject constructor(
     }
 
     override suspend fun importKey(name: String, privateKeyContent: String, publicKeyContent: String?) = withContext(Dispatchers.IO) {
-        val privateKeyFile = File(keysDir, name)
+        val sanitizedName = File(name).name.replace("..", "")
+        require(sanitizedName.isNotBlank()) { "Invalid key name" }
+        val privateKeyFile = File(keysDir, sanitizedName)
+        require(privateKeyFile.canonicalPath.startsWith(keysDir.canonicalPath)) { "Invalid key path" }
         privateKeyFile.writeText(privateKeyContent)
         
         if (publicKeyContent != null) {
-            File(keysDir, "$name.pub").writeText(publicKeyContent)
+            File(keysDir, "$sanitizedName.pub").writeText(publicKeyContent)
         }
         
         refreshTrigger.emit(Unit)

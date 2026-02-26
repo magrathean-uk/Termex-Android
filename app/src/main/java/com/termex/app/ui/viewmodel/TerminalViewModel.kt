@@ -10,16 +10,22 @@ import com.termex.app.core.ssh.SSHConnectionConfig
 import com.termex.app.core.ssh.SSHConnectionState
 import com.termex.app.core.ssh.SshConfigBuilder
 import com.termex.app.core.ssh.TerminalBuffer
+import com.termex.app.data.prefs.TerminalSettings
 import com.termex.app.data.prefs.UserPreferencesRepository
 import com.termex.app.domain.Server
 import com.termex.app.domain.ServerRepository
+import com.termex.app.domain.Snippet
+import com.termex.app.domain.SnippetRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -30,7 +36,8 @@ class TerminalViewModel @Inject constructor(
     private val serverRepository: ServerRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val sshConfigBuilder: SshConfigBuilder,
-    private val sessionRepository: com.termex.app.data.repository.SessionRepository
+    private val sessionRepository: com.termex.app.data.repository.SessionRepository,
+    private val snippetRepository: SnippetRepository
 ) : ViewModel() {
 
     private val _connectionState = MutableStateFlow<SSHConnectionState>(SSHConnectionState.Disconnected)
@@ -61,6 +68,25 @@ class TerminalViewModel @Inject constructor(
 
     private var pendingServerId: String? = null
     private var hostKeyVerificationDeferred: CompletableDeferred<Boolean>? = null
+
+    // Snippets
+    val snippets: StateFlow<List<Snippet>> = snippetRepository.getAllSnippets()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    // Terminal settings (font, colors)
+    val terminalSettings: StateFlow<TerminalSettings> = userPreferencesRepository.terminalSettingsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TerminalSettings())
+
+    private val _showSnippetPicker = MutableStateFlow(false)
+    val showSnippetPicker: StateFlow<Boolean> = _showSnippetPicker.asStateFlow()
+
+    fun showSnippetPicker() { _showSnippetPicker.value = true }
+    fun hideSnippetPicker() { _showSnippetPicker.value = false }
+
+    fun insertSnippet(snippet: Snippet) {
+        sendInput(snippet.command)
+        _showSnippetPicker.value = false
+    }
 
     init {
         // Track global demo mode setting
@@ -216,18 +242,17 @@ class TerminalViewModel @Inject constructor(
     private fun startReading() {
         readJob?.cancel()
         readJob = viewModelScope.launch(Dispatchers.IO) {
-            val buffer = ByteArray(8192)
             val inputStream = sshClient.inputStream ?: return@launch
+            val reader = java.io.InputStreamReader(inputStream, Charsets.UTF_8)
+            val charBuffer = CharArray(4096)
             
             try {
                 while (isActive && sshClient.isConnected()) {
-                    // Blocking read is efficient and correct for network streams
-                    val bytesRead = inputStream.read(buffer)
-                    if (bytesRead > 0) {
-                        val data = String(buffer, 0, bytesRead, Charsets.UTF_8)
+                    val charsRead = reader.read(charBuffer)
+                    if (charsRead > 0) {
+                        val data = String(charBuffer, 0, charsRead)
                         terminalBuffer.write(data)
-                    } else if (bytesRead == -1) {
-                        // End of stream
+                    } else if (charsRead == -1) {
                         sshClient.disconnect()
                         break
                     }
@@ -239,7 +264,7 @@ class TerminalViewModel @Inject constructor(
     }
     
     fun sendInput(data: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             if (isInDemoMode) {
                 demoTerminal?.processInput(data)
             } else {
@@ -262,6 +287,14 @@ class TerminalViewModel @Inject constructor(
     fun resizeTerminal(cols: Int, rows: Int, widthPx: Int, heightPx: Int) {
         terminalBuffer.resize(cols, rows)
         sshClient.resizeTerminal(cols, rows, widthPx, heightPx)
+    }
+    
+    fun scrollTerminal(deltaLines: Int) {
+        if (deltaLines > 0) {
+            terminalBuffer.scrollUp(deltaLines)
+        } else if (deltaLines < 0) {
+            terminalBuffer.scrollDown(-deltaLines)
+        }
     }
     
     fun disconnect() {
@@ -288,35 +321,34 @@ class TerminalViewModel @Inject constructor(
         super.onCleared()
         sshClient.setHostKeyVerificationCallback(null)
         
-        // Save session state before clearing
-        _currentServer.value?.let { server ->
-            saveSessionState(server.id)
-        }
-        
-        disconnect()
-    }
-    
-    private fun saveSessionState(serverId: String) {
-        viewModelScope.launch {
+        // Capture buffer content BEFORE disconnect clears it
+        val server = _currentServer.value
+        val bufferSnapshot = if (server != null) {
             try {
-                val buffer = terminalBuffer.contentFlow.value
-                    .takeLast(500) // Save last 500 lines
+                terminalBuffer.contentFlow.value
+                    .takeLast(500)
                     .joinToString("\n") { line ->
                         line.cells.joinToString("") { it.char.toString() }
                     }
-                
-                val sessionState = com.termex.app.domain.SessionState(
-                    id = java.util.UUID.randomUUID().toString(),
-                    serverId = serverId,
-                    terminalBuffer = buffer,
-                    workingDirectory = null,
-                    connectedAt = System.currentTimeMillis(),
-                    lastActiveAt = System.currentTimeMillis()
-                )
-                
-                sessionRepository.saveSession(sessionState)
-            } catch (e: Exception) {
-                // Failed to save - not critical
+            } catch (_: Exception) { null }
+        } else null
+        
+        disconnect()
+        
+        // Save session with NonCancellable since viewModelScope is cancelled
+        if (server != null && bufferSnapshot != null) {
+            kotlinx.coroutines.CoroutineScope(Dispatchers.IO + NonCancellable).launch {
+                try {
+                    val sessionState = com.termex.app.domain.SessionState(
+                        id = java.util.UUID.randomUUID().toString(),
+                        serverId = server.id,
+                        terminalBuffer = bufferSnapshot,
+                        workingDirectory = null,
+                        connectedAt = System.currentTimeMillis(),
+                        lastActiveAt = System.currentTimeMillis()
+                    )
+                    sessionRepository.saveSession(sessionState)
+                } catch (_: Exception) {}
             }
         }
     }

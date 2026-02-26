@@ -53,10 +53,10 @@ class MultiTerminalViewModel @Inject constructor(
     private val _paneStates = MutableStateFlow<Map<String, TerminalPaneState>>(emptyMap())
     val paneStates: StateFlow<Map<String, TerminalPaneState>> = _paneStates.asStateFlow()
 
-    private val clients = mutableMapOf<String, SSHClient>()
-    private val buffers = mutableMapOf<String, TerminalBuffer>()
-    private val readJobs = mutableMapOf<String, Job>()
-    private val hostKeyDeferred = mutableMapOf<String, CompletableDeferred<Boolean>>()
+    private val clients = java.util.concurrent.ConcurrentHashMap<String, SSHClient>()
+    private val buffers = java.util.concurrent.ConcurrentHashMap<String, TerminalBuffer>()
+    private val readJobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
+    private val hostKeyDeferred = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
     private val pendingPrompts = ArrayDeque<HostKeyPrompt>()
 
     private val _selectedPane = MutableStateFlow<String?>(null)
@@ -117,14 +117,15 @@ class MultiTerminalViewModel @Inject constructor(
     private fun startReading(serverId: String, client: SSHClient, buffer: TerminalBuffer) {
         readJobs[serverId]?.cancel()
         readJobs[serverId] = viewModelScope.launch(Dispatchers.IO) {
-            val byteBuffer = ByteArray(8192)
             val inputStream = client.inputStream ?: return@launch
+            val reader = java.io.InputStreamReader(inputStream, Charsets.UTF_8)
+            val charBuffer = CharArray(4096)
 
             try {
                 while (isActive && client.isConnected()) {
-                    val bytesRead = inputStream.read(byteBuffer)
-                    if (bytesRead > 0) {
-                        val data = String(byteBuffer, 0, bytesRead, Charsets.UTF_8)
+                    val charsRead = reader.read(charBuffer)
+                    if (charsRead > 0) {
+                        val data = String(charBuffer, 0, charsRead)
                         buffer.write(data)
                         updatePaneState(serverId) {
                             it.copy(
@@ -132,7 +133,7 @@ class MultiTerminalViewModel @Inject constructor(
                                 cursorPosition = buffer.cursorPosition.value
                             )
                         }
-                    } else if (bytesRead == -1) {
+                    } else if (charsRead == -1) {
                         updatePaneState(serverId) {
                             it.copy(connectionState = SSHConnectionState.Disconnected)
                         }

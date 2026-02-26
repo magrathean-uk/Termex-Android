@@ -1,27 +1,40 @@
 package com.termex.app.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -29,11 +42,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -43,6 +58,7 @@ import com.termex.app.ui.components.HostKeyVerificationDialog
 import com.termex.app.ui.components.PasswordDialog
 import com.termex.app.ui.components.TerminalKeyboard
 import com.termex.app.ui.components.TerminalView
+import com.termex.app.ui.theme.TerminalColorScheme
 import com.termex.app.ui.viewmodel.TerminalViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,31 +74,53 @@ fun TerminalScreen(
     val hostKeyVerification by viewModel.hostKeyVerification.collectAsState()
     val lines by viewModel.terminalLines.collectAsState()
     val cursorPosition by viewModel.cursorPosition.collectAsState()
+    val showSnippetPicker by viewModel.showSnippetPicker.collectAsState()
+    val snippets by viewModel.snippets.collectAsState()
+    val terminalSettings by viewModel.terminalSettings.collectAsState()
+    val colorScheme = TerminalColorScheme.fromName(terminalSettings.colorScheme)
 
     var ctrlActive by remember { mutableStateOf(false) }
     var altActive by remember { mutableStateOf(false) }
-
+    var showDisconnectConfirm by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
+    val snippetSheetState = rememberModalBottomSheetState()
 
-    // Connect on launch
     LaunchedEffect(serverId) {
         viewModel.connect(serverId)
     }
 
-    // Handle back press
     BackHandler {
-        viewModel.disconnect()
-        onNavigateBack()
+        if (connectionState is SSHConnectionState.Connected) {
+            showDisconnectConfirm = true
+        } else {
+            onNavigateBack()
+        }
     }
 
-    // Password dialog
+    // Disconnect confirmation dialog
+    if (showDisconnectConfirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDisconnectConfirm = false },
+            title = { Text("Disconnect?") },
+            text = { Text("Are you sure you want to disconnect from ${currentServer?.hostname ?: "this server"}?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDisconnectConfirm = false
+                    viewModel.disconnect()
+                    onNavigateBack()
+                }) { Text("Disconnect") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDisconnectConfirm = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     if (needsPassword) {
         PasswordDialog(
             hostname = currentServer?.hostname ?: "",
-            onConfirm = { password ->
-                viewModel.providePassword(password)
-            },
+            onConfirm = { password -> viewModel.providePassword(password) },
             onDismiss = {
                 viewModel.disconnect()
                 onNavigateBack()
@@ -90,7 +128,6 @@ fun TerminalScreen(
         )
     }
 
-    // Host key verification dialog
     hostKeyVerification?.let { verification ->
         HostKeyVerificationDialog(
             verification = verification,
@@ -102,36 +139,138 @@ fun TerminalScreen(
             }
         )
     }
-    
+
+    // Snippet picker bottom sheet
+    if (showSnippetPicker) {
+        ModalBottomSheet(
+            onDismissRequest = { viewModel.hideSnippetPicker() },
+            sheetState = snippetSheetState,
+            containerColor = Color(0xFF1C1C1E),
+            dragHandle = { BottomSheetDefaults.DragHandle(color = Color(0xFF636366)) }
+        ) {
+            Column(modifier = Modifier.padding(bottom = 32.dp)) {
+                Text(
+                    text = "Snippets",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                )
+                HorizontalDivider(color = Color(0xFF3A3A3C))
+                if (snippets.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No snippets. Add them in the Snippets tab.",
+                            color = Color(0xFF636366),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                } else {
+                    LazyColumn {
+                        items(snippets) { snippet ->
+                            ListItem(
+                                headlineContent = {
+                                    Text(snippet.name, color = Color.White)
+                                },
+                                supportingContent = {
+                                    Text(
+                                        text = snippet.command,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = Color(0xFF98989D),
+                                        maxLines = 2
+                                    )
+                                },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                modifier = Modifier.clickable {
+                                    viewModel.insertSnippet(snippet)
+                                }
+                            )
+                            HorizontalDivider(color = Color(0xFF3A3A3C))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = when (connectionState) {
-                            is SSHConnectionState.Connected -> currentServer?.displayName ?: "Terminal"
-                            is SSHConnectionState.Connecting -> "Connecting..."
-                            is SSHConnectionState.VerifyingHostKey -> "Verifying Host..."
-                            is SSHConnectionState.Error -> "Error"
-                            is SSHConnectionState.Disconnected -> "Disconnected"
+                    Column {
+                        Text(
+                            text = when (connectionState) {
+                                is SSHConnectionState.Connected -> currentServer?.displayName ?: "Terminal"
+                                is SSHConnectionState.Connecting -> "Connecting…"
+                                is SSHConnectionState.VerifyingHostKey -> "Verifying Host…"
+                                is SSHConnectionState.Error -> "Error"
+                                is SSHConnectionState.Disconnected -> "Disconnected"
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White
+                        )
+                        if (connectionState is SSHConnectionState.Connected) {
+                            currentServer?.let { server ->
+                                Text(
+                                    text = "${server.username}@${server.hostname}:${server.port}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF98989D)
+                                )
+                            }
                         }
-                    )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = {
                         viewModel.disconnect()
                         onNavigateBack()
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White
+                        )
                     }
                 },
                 actions = {
                     if (connectionState is SSHConnectionState.Connected) {
+                        // Snippets button
+                        IconButton(onClick = { viewModel.showSnippetPicker() }) {
+                            Icon(
+                                Icons.Default.Code,
+                                contentDescription = "Snippets",
+                                tint = Color(0xFF98989D)
+                            )
+                        }
+                        // Port Forwarding button (navigate back then to port forwarding)
+                        currentServer?.let { server ->
+                            if (server.portForwards.isNotEmpty()) {
+                                IconButton(onClick = {
+                                    // Navigate to port forwarding for this server
+                                    // We pass a callback via the parent nav but can't easily do here
+                                    // Show a simple indicator instead
+                                }) {
+                                    Icon(
+                                        Icons.Default.Dns,
+                                        contentDescription = "Port Forwards",
+                                        tint = Color(0xFF30D158)
+                                    )
+                                }
+                            }
+                        }
                         IconButton(onClick = {
                             viewModel.disconnect()
                             onNavigateBack()
                         }) {
-                            Icon(Icons.Default.Close, contentDescription = "Disconnect")
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Disconnect",
+                                tint = Color(0xFFFF453A)
+                            )
                         }
                     }
                 },
@@ -142,6 +281,9 @@ fun TerminalScreen(
         },
         containerColor = Color.Black
     ) { padding ->
+        // Hidden text field for soft keyboard input — placed outside `when` to avoid state loss
+        var textInput by remember { mutableStateOf("") }
+        
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -151,25 +293,55 @@ fun TerminalScreen(
             when (connectionState) {
                 is SSHConnectionState.Connecting,
                 is SSHConnectionState.VerifyingHostKey -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.padding(16.dp)
-                    )
-                }
-                is SSHConnectionState.Error -> {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Error: ${(connectionState as SSHConnectionState.Error).message}",
-                            color = Color.Red
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        TextButton(onClick = {
-                            viewModel.disconnect()
-                            onNavigateBack()
-                        }) {
-                            Text("Close")
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            CircularProgressIndicator(color = Color(0xFF30D158))
+                            Text(
+                                text = if (connectionState is SSHConnectionState.Connecting)
+                                    "Connecting to ${currentServer?.displayName ?: "server"}…"
+                                else "Verifying host key…",
+                                color = Color(0xFF98989D)
+                            )
                         }
                     }
                 }
+
+                is SSHConnectionState.Error -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.padding(32.dp)
+                        ) {
+                            Text(
+                                text = "Connection Failed",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color(0xFFFF453A)
+                            )
+                            Text(
+                                text = (connectionState as SSHConnectionState.Error).message,
+                                color = Color(0xFF98989D),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            TextButton(onClick = {
+                                viewModel.disconnect()
+                                onNavigateBack()
+                            }) {
+                                Text("Close", color = Color(0xFF0A84FF))
+                            }
+                        }
+                    }
+                }
+
                 is SSHConnectionState.Connected -> {
                     // Terminal view
                     TerminalView(
@@ -177,17 +349,19 @@ fun TerminalScreen(
                         cursorPosition = cursorPosition,
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxWidth()
-                            .focusRequester(focusRequester),
-                        onTap = {
-                            keyboardController?.show()
-                        },
+                            .fillMaxWidth(),
+                        fontSize = terminalSettings.fontSize.toFloat(),
+                        backgroundColor = colorScheme.background,
+                        foregroundColor = colorScheme.foreground,
+                        cursorColor = colorScheme.cursor,
+                        onTap = { keyboardController?.show() },
+                        onScroll = { delta -> viewModel.scrollTerminal(delta) },
                         onSizeChanged = { cols, rows, widthPx, heightPx ->
                             viewModel.resizeTerminal(cols, rows, widthPx, heightPx)
                         }
                     )
-                    
-                    // Extended keyboard
+
+                    // Extended keyboard bar
                     TerminalKeyboard(
                         ctrlActive = ctrlActive,
                         altActive = altActive,
@@ -196,15 +370,12 @@ fun TerminalScreen(
                         onKeyPress = { sequence ->
                             viewModel.sendInput(sequence)
                             if (!sequence.startsWith("\u001B")) {
-                                // Reset modifiers after non-modifier key
                                 ctrlActive = false
                                 altActive = false
                             }
                         }
                     )
-                    
-                    // Hidden text field for keyboard input
-                    var textInput by remember { mutableStateOf("") }
+
                     androidx.compose.foundation.text.BasicTextField(
                         value = textInput,
                         onValueChange = { newValue ->
@@ -216,24 +387,29 @@ fun TerminalScreen(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(0.dp),
+                            .focusRequester(focusRequester),
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Ascii,
                             imeAction = ImeAction.None
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onAny = {
-                                viewModel.sendInput("\n")
-                            }
                         )
                     )
                 }
+
                 is SSHConnectionState.Disconnected -> {
-                    Text(
-                        text = "Disconnected",
-                        color = Color.Gray,
-                        modifier = Modifier.padding(16.dp)
-                    )
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(text = "Disconnected", color = Color(0xFF636366))
+                            TextButton(onClick = { viewModel.connect(serverId) }) {
+                                Text("Reconnect", color = Color(0xFF0A84FF))
+                            }
+                        }
+                    }
                 }
             }
         }

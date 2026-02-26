@@ -10,6 +10,8 @@ import org.apache.sshd.client.channel.ChannelShell
 import org.apache.sshd.client.session.ClientSession
 import org.apache.sshd.common.NamedResource
 import org.apache.sshd.common.config.keys.FilePasswordProvider
+import org.apache.sshd.common.session.Session
+import org.apache.sshd.common.session.SessionListener
 import org.apache.sshd.common.util.net.SshdSocketAddress
 import org.apache.sshd.common.util.security.SecurityUtils
 import org.apache.sshd.core.CoreModuleProperties
@@ -103,19 +105,19 @@ class SSHClient @Inject constructor(
         ensureCryptoProvider()
     }
 
-    private var sshClient: SshClient? = null
-    private var session: ClientSession? = null
-    private var shell: ChannelShell? = null
-    private var jumpClient: SshClient? = null
-    private var jumpSession: ClientSession? = null
-    private var jumpForward: SshdSocketAddress? = null
+    @Volatile private var sshClient: SshClient? = null
+    @Volatile private var session: ClientSession? = null
+    @Volatile private var shell: ChannelShell? = null
+    @Volatile private var jumpClient: SshClient? = null
+    @Volatile private var jumpSession: ClientSession? = null
+    @Volatile private var jumpForward: SshdSocketAddress? = null
 
     private val _connectionState = MutableStateFlow<SSHConnectionState>(SSHConnectionState.Disconnected)
     val connectionState: StateFlow<SSHConnectionState> = _connectionState.asStateFlow()
 
-    var inputStream: InputStream? = null
+    @Volatile var inputStream: InputStream? = null
         private set
-    var outputStream: OutputStream? = null
+    @Volatile var outputStream: OutputStream? = null
         private set
 
     private data class PtySize(
@@ -144,6 +146,16 @@ class SSHClient @Inject constructor(
             val (client, sess) = connectInternal(config)
             sshClient = client
             session = sess
+
+            // Detect remote disconnects
+            sess.addSessionListener(object : SessionListener {
+                override fun sessionClosed(session: Session) {
+                    if (_connectionState.value is SSHConnectionState.Connected) {
+                        _connectionState.value = SSHConnectionState.Error("Connection closed by remote host")
+                        cleanupConnection()
+                    }
+                }
+            })
 
             // Start shell with PTY
             val pty = pendingPtySize
@@ -241,12 +253,20 @@ class SSHClient @Inject constructor(
         }
 
         client.start()
-        val session = client.connect(config.username, connectHost, connectPort)
-            .verify(config.connectTimeoutMillis.toLong())
-            .session
-
-        authenticate(session, config)
-        return client to session
+        var session: ClientSession? = null
+        try {
+            session = client.connect(config.username, connectHost, connectPort)
+                .verify(config.connectTimeoutMillis.toLong())
+                .session
+            authenticate(session, config)
+            return client to session
+        } catch (e: Exception) {
+            // Clean up on failure to prevent resource leaks
+            try { session?.close() } catch (_: Exception) {}
+            try { client.stop() } catch (_: Exception) {}
+            try { client.close() } catch (_: Exception) {}
+            throw e
+        }
     }
 
     private fun authenticate(session: ClientSession, config: SSHConnectionConfig) {
@@ -300,37 +320,34 @@ class SSHClient @Inject constructor(
             outputStream?.flush()
         } catch (e: Exception) {
             _connectionState.value = SSHConnectionState.Error("Failed to send data: ${e.message}")
+            cleanupConnection()
         }
     }
     
     suspend fun sendData(data: String) = sendData(data.toByteArray())
     
     private fun cleanupConnection() {
+        try { shell?.close() } catch (_: Exception) {}
+        try { session?.close() } catch (_: Exception) {}
+        try { sshClient?.stop() } catch (_: Exception) {}
+        try { sshClient?.close() } catch (_: Exception) {}
         try {
-            shell?.close()
-            session?.close()
-            sshClient?.stop()
-            sshClient?.close()
             jumpForward?.let { forward ->
-                try {
-                    jumpSession?.stopLocalPortForwarding(forward)
-                } catch (_: Exception) {
-                }
+                jumpSession?.stopLocalPortForwarding(forward)
             }
-            jumpSession?.close()
-            jumpClient?.stop()
-            jumpClient?.close()
-        } catch (_: Exception) {
-        } finally {
-            shell = null
-            session = null
-            sshClient = null
-            jumpClient = null
-            jumpSession = null
-            jumpForward = null
-            inputStream = null
-            outputStream = null
-        }
+        } catch (_: Exception) {}
+        try { jumpSession?.close() } catch (_: Exception) {}
+        try { jumpClient?.stop() } catch (_: Exception) {}
+        try { jumpClient?.close() } catch (_: Exception) {}
+
+        shell = null
+        session = null
+        sshClient = null
+        jumpClient = null
+        jumpSession = null
+        jumpForward = null
+        inputStream = null
+        outputStream = null
     }
 
     fun disconnect() {

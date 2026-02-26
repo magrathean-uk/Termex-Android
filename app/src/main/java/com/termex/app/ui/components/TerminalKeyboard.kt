@@ -60,6 +60,20 @@ fun TerminalKeyboard(
         TerminalKey("END", "\u001B[F"),
         TerminalKey("PGUP", "\u001B[5~"),
         TerminalKey("PGDN", "\u001B[6~"),
+        TerminalKey("INS", "\u001B[2~"),
+        TerminalKey("DEL", "\u001B[3~"),
+        TerminalKey("F1", "\u001BOP"),
+        TerminalKey("F2", "\u001BOQ"),
+        TerminalKey("F3", "\u001BOR"),
+        TerminalKey("F4", "\u001BOS"),
+        TerminalKey("F5", "\u001B[15~"),
+        TerminalKey("F6", "\u001B[17~"),
+        TerminalKey("F7", "\u001B[18~"),
+        TerminalKey("F8", "\u001B[19~"),
+        TerminalKey("F9", "\u001B[20~"),
+        TerminalKey("F10", "\u001B[21~"),
+        TerminalKey("F11", "\u001B[23~"),
+        TerminalKey("F12", "\u001B[24~"),
         TerminalKey("-", "-"),
         TerminalKey("/", "/"),
         TerminalKey("|", "|"),
@@ -99,6 +113,7 @@ fun TerminalKeyboard(
                             contentDescription = key.label,
                             onClick = {
                                 var sequence = key.sequence
+                                if (altActive) sequence = "\u001B" + sequence
                                 if (ctrlActive) sequence = "\u001B" + sequence
                                 onKeyPress(sequence)
                             }
@@ -110,12 +125,12 @@ fun TerminalKeyboard(
                             onClick = {
                                 var sequence = key.sequence
                                 if (ctrlActive && key.label.length == 1) {
-                                    // Ctrl+char = char - 64 (for A-Z)
                                     val char = key.label[0].uppercaseChar()
                                     if (char in 'A'..'Z') {
                                         sequence = (char.code - 64).toChar().toString()
                                     }
                                 }
+                                if (altActive) sequence = "\u001B" + sequence
                                 onKeyPress(sequence)
                             }
                         )

@@ -21,11 +21,14 @@ import androidx.navigation.navArgument
 import com.termex.app.BuildConfig
 import com.termex.app.core.billing.SubscriptionState
 import com.termex.app.ui.navigation.Route
+import com.termex.app.ui.screens.CertificatesScreen
+import com.termex.app.ui.screens.KnownHostsScreen
 import com.termex.app.ui.screens.MainTabs
 import com.termex.app.ui.screens.MultiTerminalScreen
 import com.termex.app.ui.screens.OnboardingFlow
 import com.termex.app.ui.screens.PaywallScreen
 import com.termex.app.ui.screens.PortForwardingScreen
+import com.termex.app.ui.screens.SSHConfigBrowserScreen
 import com.termex.app.ui.screens.ServerSettingsScreen
 import com.termex.app.ui.screens.TerminalScreen
 import com.termex.app.ui.screens.WorkplacesScreen
@@ -210,6 +213,46 @@ fun TermexApp(
                     onNavigateBack = { navController.popBackStack() },
                     onOpenMultiTerminal = { workplaceId ->
                         navController.navigate(Route.MultiTerminal.createRoute(workplaceId))
+                    }
+                )
+            }
+        }
+
+        composable(Route.KnownHosts.route) {
+            PaywallGate(
+                paywallRequired = paywallRequired,
+                onSubscribed = { viewModel.refreshSubscription() },
+                onRestore = { viewModel.refreshSubscription() }
+            ) {
+                KnownHostsScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+        }
+
+        composable(Route.Certificates.route) {
+            PaywallGate(
+                paywallRequired = paywallRequired,
+                onSubscribed = { viewModel.refreshSubscription() },
+                onRestore = { viewModel.refreshSubscription() }
+            ) {
+                CertificatesScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+        }
+
+        composable(Route.SSHConfigBrowser.route) {
+            PaywallGate(
+                paywallRequired = paywallRequired,
+                onSubscribed = { viewModel.refreshSubscription() },
+                onRestore = { viewModel.refreshSubscription() }
+            ) {
+                SSHConfigBrowserScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onApplyHost = { host ->
+                        // Navigate to new server settings (without unsupported query params)
+                        navController.navigate(Route.ServerSettings.createRoute(null))
                     }
                 )
             }

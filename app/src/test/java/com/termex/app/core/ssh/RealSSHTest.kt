@@ -23,10 +23,10 @@ class RealSSHTest {
     private lateinit var sshClient: SSHClient
 
     companion object {
-        const val TEST_HOST = "172.17.17.185"
-        const val TEST_PORT = 22
-        const val TEST_USER = "root"
-        const val TEST_PASS = "root"
+        val TEST_HOST = System.getenv("SSH_TEST_HOST") ?: "172.17.17.185"
+        val TEST_PORT = System.getenv("SSH_TEST_PORT")?.toIntOrNull() ?: 22
+        val TEST_USER = System.getenv("SSH_TEST_USER") ?: "testuser"
+        val TEST_PASS = System.getenv("SSH_TEST_PASS") ?: ""
     }
 
     @Before
@@ -99,21 +99,17 @@ class RealSSHTest {
     fun test_keyBasedAuth() = runBlocking {
         println("=== Testing key-based authentication ===")
         
-        val privateKey = """
-            -----BEGIN OPENSSH PRIVATE KEY-----
-            b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
-            QyNTUxOQAAACDZ2Jlb4IorajIlorHSavVuUgc4rD9aowkoK6DWQMZ/OQAAAJAtnG7tLZxu
-            7QAAAAtzc2gtZWQyNTUxOQAAACDZ2Jlb4IorajIlorHSavVuUgc4rD9aowkoK6DWQMZ/OQ
-            AAAEBgb+fCKb8DOeaP2viRtEuj35KZKEY+1/naVE4uRh3ae9nYmVvgiitqMiWisdJq9W5S
-            BzisP1qjCSgroNZAxn85AAAAC3Rlcm1leC10ZXN0AQI=
-            -----END OPENSSH PRIVATE KEY-----
-        """.trimIndent()
+        val privateKeyStr = System.getenv("SSH_TEST_PRIVATE_KEY")
+        if (privateKeyStr.isNullOrBlank()) {
+            println("⊘ Test skipped - SSH_TEST_PRIVATE_KEY env var not set")
+            return@runBlocking
+        }
 
         val config = SSHConnectionConfig(
             hostname = TEST_HOST,
             port = TEST_PORT,
             username = TEST_USER,
-            privateKey = privateKey.toByteArray(),
+            privateKey = privateKeyStr.toByteArray(),
             authPreference = AuthPreference.KEY
         )
 

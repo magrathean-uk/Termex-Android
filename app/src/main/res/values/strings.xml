@@ -3,6 +3,7 @@
 
     <!-- Navigation -->
     <string name="nav_servers">Servers</string>
+    <string name="nav_workplaces">Workplaces</string>
     <string name="nav_keys">Keys</string>
     <string name="nav_snippets">Snippets</string>
     <string name="nav_settings">Settings</string>

@@ -31,10 +31,10 @@ class PortForwardManager @Inject constructor() {
     private var currentClient: SSHClient? = null
 
     fun setClient(client: SSHClient?) {
-        currentClient = client
         if (client == null) {
             stopAllForwards()
         }
+        currentClient = client
     }
 
     fun startForward(forward: PortForward): Result<Unit> {

@@ -58,6 +58,8 @@ class SshConfigBuilder @Inject constructor(
             username = server.username,
             password = resolvedPassword,
             privateKey = privateKeyBytes,
+            // Use password as passphrase for encrypted keys when key auth is selected
+            privateKeyPassphrase = if (privateKeyBytes != null) resolvedPassword else null,
             keepAliveIntervalSeconds = keepAliveInterval,
             authPreference = authPreference,
             jumpHost = jumpHostConfig,

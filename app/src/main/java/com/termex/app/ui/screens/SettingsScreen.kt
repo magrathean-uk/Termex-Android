@@ -37,7 +37,8 @@ import com.termex.app.ui.viewmodel.SettingsViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    onNavigateToWorkplaces: () -> Unit = {},
+    onNavigateToKnownHosts: () -> Unit = {},
+    onNavigateToSSHConfigBrowser: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val themeMode by viewModel.themeMode.collectAsState()
@@ -100,9 +101,18 @@ fun SettingsScreen(
 
             item {
                 ListItem(
-                    headlineContent = { Text(stringResource(R.string.title_workplaces)) },
-                    supportingContent = { Text(stringResource(R.string.workplaces_supporting)) },
-                    modifier = Modifier.clickable { onNavigateToWorkplaces() }
+                    headlineContent = { Text("Known Hosts") },
+                    supportingContent = { Text("Manage trusted server fingerprints") },
+                    modifier = Modifier.clickable { onNavigateToKnownHosts() }
+                )
+                HorizontalDivider()
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text("SSH Config Browser") },
+                    supportingContent = { Text("Import servers from SSH config file") },
+                    modifier = Modifier.clickable { onNavigateToSSHConfigBrowser() }
                 )
                 HorizontalDivider()
             }

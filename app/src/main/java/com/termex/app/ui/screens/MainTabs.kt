@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Workspaces
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -16,14 +17,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.termex.app.R
 import com.termex.app.ui.navigation.Route
@@ -33,41 +33,30 @@ fun MainTabs(
     rootNavController: NavHostController
 ) {
     val navController = rememberNavController()
-    var selectedItem by remember { mutableIntStateOf(0) }
-    
-    val items = listOf(
-        stringResource(R.string.nav_servers),
-        stringResource(R.string.nav_keys),
-        stringResource(R.string.nav_snippets),
-        stringResource(R.string.nav_settings)
-    )
-    val icons = listOf(
-        Icons.Default.Dns,
-        Icons.Default.Key,
-        Icons.Default.Code,
-        Icons.Default.Settings
-    )
-    val routes = listOf(
-        Route.Servers.route,
-        Route.Keys.route,
-        Route.Snippets.route,
-        Route.Settings.route
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
+    data class TabItem(val label: String, val icon: ImageVector, val route: String)
+
+    val tabs = listOf(
+        TabItem(stringResource(R.string.nav_servers), Icons.Default.Dns, Route.Servers.route),
+        TabItem(stringResource(R.string.nav_workplaces), Icons.Default.Workspaces, Route.Workplaces.route),
+        TabItem(stringResource(R.string.nav_keys), Icons.Default.Key, Route.Keys.route),
+        TabItem(stringResource(R.string.nav_snippets), Icons.Default.Code, Route.Snippets.route),
+        TabItem(stringResource(R.string.nav_settings), Icons.Default.Settings, Route.Settings.route),
     )
 
     Scaffold(
         bottomBar = {
             NavigationBar {
-                items.forEachIndexed { index, item ->
+                tabs.forEachIndexed { index, tab ->
                     NavigationBarItem(
-                        icon = { Icon(icons[index], contentDescription = item) },
-                        label = { Text(item) },
-                        selected = selectedItem == index,
+                        icon = { Icon(tab.icon, contentDescription = tab.label) },
+                        label = { Text(tab.label) },
+                        selected = currentRoute == tab.route,
                         onClick = {
-                            selectedItem = index
-                            navController.navigate(routes[index]) {
-                                popUpTo(navController.graph.startDestinationId) {
-                                    saveState = true
-                                }
+                            navController.navigate(tab.route) {
+                                popUpTo(navController.graph.startDestinationId) { saveState = true }
                                 launchSingleTop = true
                                 restoreState = true
                             }
@@ -102,12 +91,29 @@ fun MainTabs(
                     }
                 )
             }
-            composable(Route.Keys.route) { KeyListScreen() }
+            composable(Route.Workplaces.route) {
+                WorkplacesScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onOpenMultiTerminal = { workplaceId ->
+                        rootNavController.navigate(Route.MultiTerminal.createRoute(workplaceId))
+                    }
+                )
+            }
+            composable(Route.Keys.route) {
+                KeyListScreen(
+                    onNavigateToCertificates = {
+                        rootNavController.navigate(Route.Certificates.route)
+                    }
+                )
+            }
             composable(Route.Snippets.route) { SnippetListScreen() }
             composable(Route.Settings.route) {
                 SettingsScreen(
-                    onNavigateToWorkplaces = {
-                        rootNavController.navigate(Route.Workplaces.route)
+                    onNavigateToKnownHosts = {
+                        rootNavController.navigate(Route.KnownHosts.route)
+                    },
+                    onNavigateToSSHConfigBrowser = {
+                        rootNavController.navigate(Route.SSHConfigBrowser.route)
                     }
                 )
             }

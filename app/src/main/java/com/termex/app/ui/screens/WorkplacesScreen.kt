@@ -48,7 +48,7 @@ import com.termex.app.ui.viewmodel.WorkplacesViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorkplacesScreen(
-    onNavigateBack: () -> Unit,
+    onNavigateBack: (() -> Unit)? = null,
     onOpenMultiTerminal: (String) -> Unit,
     viewModel: WorkplacesViewModel = hiltViewModel()
 ) {
@@ -64,8 +64,10 @@ fun WorkplacesScreen(
             TopAppBar(
                 title = { Text("Workplaces") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    if (onNavigateBack != null) {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
                     }
                 }
             )

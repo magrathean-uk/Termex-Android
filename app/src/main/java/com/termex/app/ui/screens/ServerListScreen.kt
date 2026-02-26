@@ -15,6 +15,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Warning
@@ -29,6 +33,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -111,10 +116,59 @@ fun ServerListScreen(
                     Text(stringResource(R.string.empty_servers))
                 }
             } else {
+                var serverToDelete by remember { mutableStateOf<Server?>(null) }
+                
+                // Delete confirmation dialog
+                serverToDelete?.let { server ->
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { serverToDelete = null },
+                        title = { Text("Delete Server") },
+                        text = { Text("Are you sure you want to delete \"${server.displayName}\"?") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                viewModel.deleteServer(server)
+                                serverToDelete = null
+                            }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { serverToDelete = null }) { Text("Cancel") }
+                        }
+                    )
+                }
+                
                 LazyColumn(modifier = Modifier.weight(1f)) {
                 items(servers, key = { it.id }) { server ->
                     var showMenu by remember { mutableStateOf(false) }
 
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            if (value == SwipeToDismissBoxValue.EndToStart && !server.isDemo) {
+                                serverToDelete = server
+                                false // Don't dismiss, let dialog confirm
+                            } else false
+                        }
+                    )
+
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        enableDismissFromStartToEnd = false,
+                        enableDismissFromEndToStart = !server.isDemo,
+                        backgroundContent = {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(MaterialTheme.colorScheme.errorContainer)
+                                    .padding(end = 24.dp),
+                                contentAlignment = Alignment.CenterEnd
+                            ) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
+                    ) {
                     ListItem(
                         headlineContent = {
                             if (server.isDemo) {
@@ -164,7 +218,7 @@ fun ServerListScreen(
                                             text = { Text(stringResource(R.string.action_delete)) },
                                             onClick = {
                                                 showMenu = false
-                                                viewModel.deleteServer(server)
+                                                serverToDelete = server
                                             },
                                             leadingIcon = { Icon(Icons.Default.Delete, null) }
                                         )
@@ -173,6 +227,7 @@ fun ServerListScreen(
                             }
                         }
                     )
+                    } // SwipeToDismissBox
                     HorizontalDivider()
                 }
             }

@@ -37,12 +37,20 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.ui.graphics.Color
+import java.io.File
 import com.termex.app.R
 import com.termex.app.ui.viewmodel.KeysViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KeyListScreen(
+    onNavigateToCertificates: () -> Unit = {},
     viewModel: KeysViewModel = hiltViewModel()
 ) {
     val keys by viewModel.keys.collectAsState()
@@ -53,34 +61,43 @@ fun KeyListScreen(
     
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.title_ssh_keys)) })
+            TopAppBar(title = { Text(stringResource(R.string.title_ssh_keys)) },
+                actions = {
+                    Box {
+                        androidx.compose.material3.IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.Add, contentDescription = "Add")
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.action_generate_new_key)) },
+                                onClick = {
+                                    showMenu = false
+                                    viewModel.showGenerateDialog()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.action_import_key)) },
+                                onClick = {
+                                    showMenu = false
+                                    viewModel.showImportDialog()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Certificates") },
+                                onClick = {
+                                    showMenu = false
+                                    onNavigateToCertificates()
+                                }
+                            )
+                        }
+                    }
+                }
+            )
         },
-        floatingActionButton = {
-            Box {
-                FloatingActionButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.action_add_key))
-                }
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_generate_new_key)) },
-                        onClick = {
-                            showMenu = false
-                            viewModel.showGenerateDialog()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_import_key)) },
-                        onClick = {
-                            showMenu = false
-                            viewModel.showImportDialog()
-                        }
-                    )
-                }
-            }
-        }
+        floatingActionButton = {}
     ) { padding ->
         if (keys.isEmpty()) {
             Box(
@@ -94,6 +111,11 @@ fun KeyListScreen(
         } else {
             LazyColumn(modifier = Modifier.padding(padding)) {
                 items(keys, key = { it.name }) { key ->
+                    val isEncrypted = remember(key.path) {
+                        try {
+                            File(key.path).readText().contains("ENCRYPTED")
+                        } catch (e: Exception) { false }
+                    }
                     ListItem(
                         headlineContent = { Text(key.name) },
                         supportingContent = {
@@ -106,6 +128,16 @@ fun KeyListScreen(
                                         maxLines = 1,
                                         style = MaterialTheme.typography.bodySmall
                                     )
+                                }
+                                if (isEncrypted) {
+                                    Row(modifier = Modifier.padding(top = 4.dp)) {
+                                        Badge(
+                                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                        ) {
+                                            Text("Encrypted", style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
                                 }
                             }
                         },
