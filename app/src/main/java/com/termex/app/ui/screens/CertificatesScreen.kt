@@ -35,9 +35,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.termex.app.R
 import com.termex.app.domain.SSHCertificate
 import com.termex.app.ui.viewmodel.CertificatesViewModel
 
@@ -54,7 +56,7 @@ fun CertificatesScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Certificates") },
+                title = { Text(stringResource(R.string.certificates_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -77,12 +79,12 @@ fun CertificatesScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "No certificates",
+                        text = stringResource(R.string.certificates_empty_title),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Import OpenSSH certificates to use for authentication",
+                        text = stringResource(R.string.certificates_empty_description),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         modifier = Modifier.padding(horizontal = 32.dp),
@@ -105,7 +107,7 @@ fun CertificatesScreen(
                                 )
                                 if (cert.caFingerprint.isNotEmpty()) {
                                     Text(
-                                        text = "CA: ${cert.caFingerprint}",
+                                        text = stringResource(R.string.certificates_ca_fingerprint, cert.caFingerprint),
                                         fontFamily = FontFamily.Monospace,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -148,22 +150,22 @@ fun CertificatesScreen(
 
         AlertDialog(
             onDismissRequest = { viewModel.hideImportDialog() },
-            title = { Text("Import Certificate") },
+            title = { Text(stringResource(R.string.certificates_import_title)) },
             text = {
                 Column {
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text("Certificate Name") },
-                        placeholder = { Text("e.g. id_ed25519-cert.pub") },
+                        label = { Text(stringResource(R.string.certificates_label_name)) },
+                        placeholder = { Text(stringResource(R.string.certificates_placeholder_name)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
                     OutlinedTextField(
                         value = content,
                         onValueChange = { content = it },
-                        label = { Text("Certificate Content") },
-                        placeholder = { Text("Paste OpenSSH certificate…") },
+                        label = { Text(stringResource(R.string.certificates_label_content)) },
+                        placeholder = { Text(stringResource(R.string.certificates_placeholder_content)) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 8.dp),
@@ -176,12 +178,12 @@ fun CertificatesScreen(
                     onClick = { viewModel.importCertificate(name, content) },
                     enabled = name.isNotBlank() && content.isNotBlank()
                 ) {
-                    Text("Import")
+                    Text(stringResource(R.string.action_import))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.hideImportDialog() }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )
@@ -190,8 +192,8 @@ fun CertificatesScreen(
     certToDelete?.let { cert ->
         AlertDialog(
             onDismissRequest = { certToDelete = null },
-            title = { Text("Delete Certificate") },
-            text = { Text("Delete \"${cert.name}\"? This cannot be undone.") },
+            title = { Text(stringResource(R.string.certificates_delete_title)) },
+            text = { Text(stringResource(R.string.certificates_delete_message, cert.name)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -199,11 +201,11 @@ fun CertificatesScreen(
                         certToDelete = null
                     }
                 ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { certToDelete = null }) { Text("Cancel") }
+                TextButton(onClick = { certToDelete = null }) { Text(stringResource(R.string.action_cancel)) }
             }
         )
     }

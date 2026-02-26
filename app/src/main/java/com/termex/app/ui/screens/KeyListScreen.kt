@@ -86,7 +86,7 @@ fun KeyListScreen(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Certificates") },
+                                text = { Text(stringResource(R.string.keys_certificates)) },
                                 onClick = {
                                     showMenu = false
                                     onNavigateToCertificates()
@@ -135,7 +135,7 @@ fun KeyListScreen(
                                             containerColor = MaterialTheme.colorScheme.secondaryContainer,
                                             contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                                         ) {
-                                            Text("Encrypted", style = MaterialTheme.typography.labelSmall)
+                                            Text(stringResource(R.string.keys_encrypted_badge), style = MaterialTheme.typography.labelSmall)
                                         }
                                     }
                                 }

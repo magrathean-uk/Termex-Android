@@ -41,6 +41,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import com.termex.app.R
 import com.termex.app.domain.Server
 import com.termex.app.domain.Workplace
 import com.termex.app.ui.viewmodel.WorkplacesViewModel
@@ -62,7 +65,7 @@ fun WorkplacesScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Workplaces") },
+                title = { Text(stringResource(R.string.title_workplaces)) },
                 navigationIcon = {
                     if (onNavigateBack != null) {
                         IconButton(onClick = onNavigateBack) {
@@ -85,7 +88,7 @@ fun WorkplacesScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No workplaces. Tap + to create one.")
+                Text(stringResource(R.string.workplaces_empty))
             }
         } else {
             LazyColumn(
@@ -113,12 +116,12 @@ fun WorkplacesScreen(
     if (showDialog) {
         AlertDialog(
             onDismissRequest = { viewModel.dismissDialog() },
-            title = { Text(if (formState.isEditing) "Edit Workplace" else "New Workplace") },
+            title = { Text(stringResource(if (formState.isEditing) R.string.workplaces_edit_title else R.string.workplaces_new_title)) },
             text = {
                 OutlinedTextField(
                     value = formState.name,
                     onValueChange = { viewModel.updateName(it) },
-                    label = { Text("Name") },
+                    label = { Text(stringResource(R.string.label_name)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -128,12 +131,12 @@ fun WorkplacesScreen(
                     onClick = { viewModel.saveWorkplace() },
                     enabled = formState.name.isNotBlank()
                 ) {
-                    Text("Save")
+                    Text(stringResource(R.string.action_save))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.dismissDialog() }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )
@@ -148,10 +151,10 @@ fun WorkplacesScreen(
 
         AlertDialog(
             onDismissRequest = { viewModel.dismissAddServerDialog() },
-            title = { Text("Add Server") },
+            title = { Text(stringResource(R.string.action_add_server)) },
             text = {
                 if (availableServers.isEmpty()) {
-                    Text("No servers available to add. Create servers first.")
+                    Text(stringResource(R.string.workplaces_no_servers_available))
                 } else {
                     LazyColumn {
                         items(availableServers, key = { it.id }) { server ->
@@ -170,7 +173,7 @@ fun WorkplacesScreen(
             },
             confirmButton = {
                 TextButton(onClick = { viewModel.dismissAddServerDialog() }) {
-                    Text("Done")
+                    Text(stringResource(R.string.action_done))
                 }
             }
         )
@@ -199,7 +202,7 @@ private fun WorkplaceCard(
             // Header
             ListItem(
                 headlineContent = { Text(workplace.name) },
-                supportingContent = { Text("${servers.size} server${if (servers.size != 1) "s" else ""}") },
+                supportingContent = { Text(pluralStringResource(R.plurals.workplaces_server_count, servers.size, servers.size)) },
                 leadingContent = {
                     IconButton(onClick = onToggleExpand) {
                         Icon(
@@ -230,7 +233,7 @@ private fun WorkplaceCard(
 
                     if (servers.isEmpty()) {
                         Text(
-                            text = "No servers in this workplace",
+                            text = stringResource(R.string.workplaces_no_servers),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(16.dp)
@@ -257,7 +260,7 @@ private fun WorkplaceCard(
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Add Server")
+                        Text(stringResource(R.string.action_add_server))
                     }
                 }
             }

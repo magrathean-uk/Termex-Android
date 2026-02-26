@@ -28,8 +28,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.termex.app.R
 import com.termex.app.domain.KnownHost
 import com.termex.app.ui.viewmodel.KnownHostsViewModel
 
@@ -46,7 +48,7 @@ fun KnownHostsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Known Hosts") },
+                title = { Text(stringResource(R.string.known_hosts_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -55,7 +57,7 @@ fun KnownHostsScreen(
                 actions = {
                     if (knownHosts.isNotEmpty()) {
                         TextButton(onClick = { showClearAllDialog = true }) {
-                            Text("Clear All", color = MaterialTheme.colorScheme.error)
+                            Text(stringResource(R.string.known_hosts_action_clear_all), color = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
@@ -71,12 +73,12 @@ fun KnownHostsScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "No known hosts",
+                        text = stringResource(R.string.known_hosts_empty_title),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Trusted hosts will appear here after connecting",
+                        text = stringResource(R.string.known_hosts_empty_description),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
@@ -122,8 +124,8 @@ fun KnownHostsScreen(
     hostToDelete?.let { host ->
         AlertDialog(
             onDismissRequest = { hostToDelete = null },
-            title = { Text("Remove Host") },
-            text = { Text("Remove ${host.hostKey} from known hosts? You will be prompted to verify the host key on next connection.") },
+            title = { Text(stringResource(R.string.known_hosts_remove_title)) },
+            text = { Text(stringResource(R.string.known_hosts_remove_message, host.hostKey)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -131,12 +133,12 @@ fun KnownHostsScreen(
                         hostToDelete = null
                     }
                 ) {
-                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.known_hosts_action_remove), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { hostToDelete = null }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )
@@ -146,8 +148,8 @@ fun KnownHostsScreen(
     if (showClearAllDialog) {
         AlertDialog(
             onDismissRequest = { showClearAllDialog = false },
-            title = { Text("Clear All Known Hosts") },
-            text = { Text("Remove all trusted hosts? You will need to re-verify all servers on next connection.") },
+            title = { Text(stringResource(R.string.known_hosts_clear_all_title)) },
+            text = { Text(stringResource(R.string.known_hosts_clear_all_message)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -155,12 +157,12 @@ fun KnownHostsScreen(
                         showClearAllDialog = false
                     }
                 ) {
-                    Text("Clear All", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.known_hosts_action_clear_all), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showClearAllDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )

@@ -122,16 +122,16 @@ fun ServerListScreen(
                 serverToDelete?.let { server ->
                     androidx.compose.material3.AlertDialog(
                         onDismissRequest = { serverToDelete = null },
-                        title = { Text("Delete Server") },
-                        text = { Text("Are you sure you want to delete \"${server.displayName}\"?") },
+                        title = { Text(stringResource(R.string.server_delete_title)) },
+                        text = { Text(stringResource(R.string.server_delete_confirmation, server.displayName)) },
                         confirmButton = {
                             TextButton(onClick = {
                                 viewModel.deleteServer(server)
                                 serverToDelete = null
-                            }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                            }) { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) }
                         },
                         dismissButton = {
-                            TextButton(onClick = { serverToDelete = null }) { Text("Cancel") }
+                            TextButton(onClick = { serverToDelete = null }) { Text(stringResource(R.string.action_cancel)) }
                         }
                     )
                 }
@@ -172,7 +172,7 @@ fun ServerListScreen(
                     ListItem(
                         headlineContent = {
                             if (server.isDemo) {
-                                Text("${server.displayName} (Demo)")
+                                Text(stringResource(R.string.server_name_demo_format, server.displayName))
                             } else {
                                 Text(server.displayName)
                             }

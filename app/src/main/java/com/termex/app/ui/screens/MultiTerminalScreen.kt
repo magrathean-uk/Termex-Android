@@ -37,11 +37,13 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.termex.app.R
 import com.termex.app.core.ssh.SSHConnectionState
 import com.termex.app.ui.components.HostKeyVerificationDialog
 import com.termex.app.ui.components.TerminalKeyboard
@@ -85,7 +87,7 @@ fun MultiTerminalScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Multi-Terminal") },
+                title = { Text(stringResource(R.string.multi_terminal_title)) },
                 navigationIcon = {
                     IconButton(onClick = {
                         viewModel.disconnectAll()
@@ -117,7 +119,7 @@ fun MultiTerminalScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Text(text = "No servers in this workplace", color = Color.Gray)
+                Text(text = stringResource(R.string.multi_terminal_no_servers), color = Color.Gray)
             }
         } else {
             val configuration = LocalConfiguration.current
@@ -239,7 +241,7 @@ private fun TerminalPane(
     ) {
         if (paneState == null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Loading...", color = Color.Gray)
+                Text(stringResource(R.string.multi_terminal_loading), color = Color.Gray)
             }
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -286,19 +288,19 @@ private fun TerminalPane(
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = "Disconnected", color = Color(0xFF636366), fontSize = 12.sp)
-                                Text(text = "Tap to connect", color = Color(0xFF48484A), fontSize = 11.sp)
+                                Text(text = stringResource(R.string.multi_terminal_disconnected), color = Color(0xFF636366), fontSize = 12.sp)
+                                Text(text = stringResource(R.string.multi_terminal_tap_to_connect), color = Color(0xFF48484A), fontSize = 11.sp)
                             }
                         }
                     }
                     is SSHConnectionState.Connecting -> {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(text = "Connecting…", color = Color(0xFFFF9F0A), fontSize = 12.sp)
+                            Text(text = stringResource(R.string.multi_terminal_connecting), color = Color(0xFFFF9F0A), fontSize = 12.sp)
                         }
                     }
                     is SSHConnectionState.VerifyingHostKey -> {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(text = "Verifying host…", color = Color(0xFFFF9F0A), fontSize = 12.sp)
+                            Text(text = stringResource(R.string.multi_terminal_verifying_host), color = Color(0xFFFF9F0A), fontSize = 12.sp)
                         }
                     }
                     is SSHConnectionState.Connected -> {

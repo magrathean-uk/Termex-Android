@@ -83,8 +83,8 @@ fun SettingsScreen(
             if (biometricAvailability == BiometricAvailability.Available) {
                 item {
                     ListItem(
-                        headlineContent = { Text("Biometric Lock") },
-                        supportingContent = { Text(if (biometricLockEnabled) "Enabled" else "Disabled") },
+                        headlineContent = { Text(stringResource(R.string.settings_biometric_lock)) },
+                        supportingContent = { Text(stringResource(if (biometricLockEnabled) R.string.settings_enabled else R.string.settings_disabled)) },
                         trailingContent = {
                             Switch(
                                 checked = biometricLockEnabled,
@@ -101,8 +101,8 @@ fun SettingsScreen(
 
             item {
                 ListItem(
-                    headlineContent = { Text("Known Hosts") },
-                    supportingContent = { Text("Manage trusted server fingerprints") },
+                    headlineContent = { Text(stringResource(R.string.settings_known_hosts)) },
+                    supportingContent = { Text(stringResource(R.string.settings_known_hosts_supporting)) },
                     modifier = Modifier.clickable { onNavigateToKnownHosts() }
                 )
                 HorizontalDivider()
@@ -110,8 +110,8 @@ fun SettingsScreen(
 
             item {
                 ListItem(
-                    headlineContent = { Text("SSH Config Browser") },
-                    supportingContent = { Text("Import servers from SSH config file") },
+                    headlineContent = { Text(stringResource(R.string.settings_ssh_config_browser)) },
+                    supportingContent = { Text(stringResource(R.string.settings_ssh_config_browser_supporting)) },
                     modifier = Modifier.clickable { onNavigateToSSHConfigBrowser() }
                 )
                 HorizontalDivider()
@@ -227,8 +227,8 @@ fun SettingsScreen(
 
             item {
                 ListItem(
-                    headlineContent = { Text("Clear Saved Sessions") },
-                    supportingContent = { Text("Remove all saved terminal sessions") },
+                    headlineContent = { Text(stringResource(R.string.settings_clear_saved_sessions)) },
+                    supportingContent = { Text(stringResource(R.string.settings_clear_saved_sessions_supporting)) },
                     modifier = Modifier.clickable { viewModel.clearSavedSessions() }
                 )
                 HorizontalDivider()

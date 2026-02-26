@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -119,8 +120,13 @@ fun PaywallScreen(
         }
     }
     
+    val startFreeTrialText = stringResource(R.string.paywall_start_free_trial)
+    val subscribeNowText = stringResource(R.string.paywall_subscribe_now)
+    val freeTrialFormat = stringResource(R.string.paywall_free_trial_format)
+    val afterTrialFormat = stringResource(R.string.paywall_price_after_trial_format)
+
     val pricingInfo = remember(productDetails) {
-        buildPricingInfo(productDetails)
+        buildPricingInfo(productDetails, startFreeTrialText, subscribeNowText, freeTrialFormat, afterTrialFormat)
     }
     
     // Pulsing animation for the subscribe button
@@ -182,7 +188,7 @@ fun PaywallScreen(
                         horizontalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = "Termex",
+                            text = stringResource(R.string.app_name),
                             style = MaterialTheme.typography.headlineLarge.copy(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 32.sp
@@ -195,7 +201,7 @@ fun PaywallScreen(
                             color = AccentGold
                         ) {
                             Text(
-                                text = "PRO",
+                                text = stringResource(R.string.paywall_pro_badge),
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                                 style = MaterialTheme.typography.labelMedium.copy(
                                     fontWeight = FontWeight.ExtraBold
@@ -215,7 +221,7 @@ fun PaywallScreen(
                 enter = fadeIn(tween(600, delayMillis = 200))
             ) {
                 Text(
-                    text = "Professional SSH Terminal\nfor Android",
+                    text = stringResource(R.string.paywall_tagline),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.Medium
@@ -245,7 +251,7 @@ fun PaywallScreen(
                         modifier = Modifier.padding(20.dp)
                     ) {
                         Text(
-                            text = "Everything Included",
+                            text = stringResource(R.string.paywall_everything_included),
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.SemiBold
                             ),
@@ -254,13 +260,13 @@ fun PaywallScreen(
                         
                         Spacer(modifier = Modifier.height(16.dp))
                         
-                        PremiumFeatureItem("Unlimited server connections")
-                        PremiumFeatureItem("SSH key generation & import")
-                        PremiumFeatureItem("Command snippets library")
-                        PremiumFeatureItem("Port forwarding (Local, Remote, Dynamic)")
-                        PremiumFeatureItem("Multi-terminal workplaces")
-                        PremiumFeatureItem("Host key verification & security")
-                        PremiumFeatureItem("Jump host / bastion support")
+                        PremiumFeatureItem(stringResource(R.string.paywall_feature_unlimited_servers))
+                        PremiumFeatureItem(stringResource(R.string.paywall_feature_ssh_keys))
+                        PremiumFeatureItem(stringResource(R.string.paywall_feature_snippets))
+                        PremiumFeatureItem(stringResource(R.string.paywall_feature_port_forwarding))
+                        PremiumFeatureItem(stringResource(R.string.paywall_feature_multi_terminal))
+                        PremiumFeatureItem(stringResource(R.string.paywall_feature_host_key))
+                        PremiumFeatureItem(stringResource(R.string.paywall_feature_jump_host))
                     }
                 }
             }
@@ -282,14 +288,14 @@ fun PaywallScreen(
                     productDetails == null -> {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "Unable to load subscription details",
+                                text = stringResource(R.string.paywall_unable_to_load),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color.White.copy(alpha = 0.7f),
                                 textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             TextButton(onClick = loadProductDetails) {
-                                Text("Tap to retry", color = AccentTeal)
+                                Text(stringResource(R.string.paywall_tap_to_retry), color = AccentTeal)
                             }
                         }
                     }
@@ -333,7 +339,7 @@ fun PaywallScreen(
                             }
                             
                             Text(
-                                text = "Cancel anytime • No commitment",
+                                text = stringResource(R.string.paywall_cancel_anytime),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.White.copy(alpha = 0.5f),
                                 modifier = Modifier.padding(top = 4.dp)
@@ -399,7 +405,7 @@ fun PaywallScreen(
                             contentColor = Color.White.copy(alpha = 0.8f)
                         )
                     ) {
-                        Text("Restore Purchases")
+                        Text(stringResource(R.string.action_restore_purchases))
                     }
                 }
             }
@@ -412,7 +418,7 @@ fun PaywallScreen(
                 enter = fadeIn(tween(600, delayMillis = 1000))
             ) {
                 Text(
-                    text = "Subscription will be charged to your Google Play account. Subscription automatically renews unless auto-renew is turned off at least 24 hours before the end of the current period.",
+                    text = stringResource(R.string.paywall_subscription_terms),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.4f),
                     textAlign = TextAlign.Center,
@@ -463,12 +469,18 @@ private data class PricingInfo(
     val buttonSubtext: String?
 )
 
-private fun buildPricingInfo(productDetails: ProductDetails?): PricingInfo {
+private fun buildPricingInfo(
+    productDetails: ProductDetails?,
+    startFreeTrialText: String,
+    subscribeNowText: String,
+    freeTrialFormat: String,
+    afterTrialFormat: String
+): PricingInfo {
     if (productDetails == null) {
         return PricingInfo(
-            trialText = "7-day free trial",
-            priceText = "$9.99/month after trial",
-            buttonTitle = "Start Free Trial",
+            trialText = String.format(freeTrialFormat, "7-day"),
+            priceText = String.format(afterTrialFormat, "$9.99/month"),
+            buttonTitle = startFreeTrialText,
             buttonSubtext = null
         )
     }
@@ -479,19 +491,19 @@ private fun buildPricingInfo(productDetails: ProductDetails?): PricingInfo {
     val paidPhase = phases.lastOrNull { it.priceAmountMicros > 0L } ?: phases.lastOrNull()
 
     val trialText = trialPhase?.billingPeriod?.let { period ->
-        formatTrialPeriod(period)?.let { "$it free trial" }
+        formatTrialPeriod(period)?.let { String.format(freeTrialFormat, it) }
     }
     val priceText = paidPhase?.let { phase ->
         val period = formatBillingPeriod(phase.billingPeriod)
         val basePrice = "${phase.formattedPrice}/$period"
         if (trialPhase != null) {
-            "$basePrice after trial"
+            String.format(afterTrialFormat, basePrice)
         } else {
             basePrice
         }
     }
 
-    val buttonTitle = if (trialPhase != null) "Start Free Trial" else "Subscribe Now"
+    val buttonTitle = if (trialPhase != null) startFreeTrialText else subscribeNowText
 
     return PricingInfo(
         trialText = trialText,

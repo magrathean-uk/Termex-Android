@@ -36,8 +36,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.termex.app.R
 import com.termex.app.core.ssh.SSHConfigHost
 import com.termex.app.core.ssh.SSHConfigParser
 import kotlinx.coroutines.Dispatchers
@@ -69,7 +71,7 @@ fun SSHConfigBrowserScreen(
                     }
                     hosts = SSHConfigParser.parse(content)
                     fileName = uri.lastPathSegment ?: "ssh_config"
-                    error = if (hosts.isEmpty()) "No hosts found in this config file" else null
+                    error = if (hosts.isEmpty()) context.getString(R.string.ssh_config_no_hosts) else null
                 } catch (e: Exception) {
                     error = "Failed to read file: ${e.message}"
                     hosts = emptyList()
@@ -81,7 +83,7 @@ fun SSHConfigBrowserScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("SSH Config Browser") },
+                title = { Text(stringResource(R.string.ssh_config_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -91,7 +93,7 @@ fun SSHConfigBrowserScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                text = { Text("Open SSH Config") },
+                text = { Text(stringResource(R.string.ssh_config_open_button)) },
                 icon = { Icon(Icons.Default.FolderOpen, contentDescription = null) },
                 onClick = { fileLauncher.launch("*/*") }
             )
@@ -118,13 +120,13 @@ fun SSHConfigBrowserScreen(
                             modifier = Modifier.padding(bottom = 16.dp)
                         )
                         Text(
-                            text = "Browse SSH Config",
+                            text = stringResource(R.string.ssh_config_browse_title),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Open an SSH config file to discover and import host profiles",
+                            text = stringResource(R.string.ssh_config_browse_description),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center

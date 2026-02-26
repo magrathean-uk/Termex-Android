@@ -17,8 +17,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.termex.app.R
 
 @Composable
 fun BiometricLockScreen(
@@ -46,7 +48,7 @@ fun BiometricLockScreen(
             Spacer(modifier = Modifier.height(24.dp))
             
             Text(
-                text = "Termex is Locked",
+                text = stringResource(R.string.biometric_title_locked),
                 style = MaterialTheme.typography.headlineMedium,
                 textAlign = TextAlign.Center
             )
@@ -54,7 +56,7 @@ fun BiometricLockScreen(
             Spacer(modifier = Modifier.height(8.dp))
             
             Text(
-                text = "Authenticate to unlock",
+                text = stringResource(R.string.biometric_authenticate_message),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -63,11 +65,11 @@ fun BiometricLockScreen(
             Spacer(modifier = Modifier.height(32.dp))
             
             TextButton(onClick = onAuthenticate) {
-                Text("Unlock")
+                Text(stringResource(R.string.biometric_unlock))
             }
             
             TextButton(onClick = onCancel) {
-                Text("Exit")
+                Text(stringResource(R.string.biometric_exit))
             }
         }
     }

@@ -19,11 +19,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.termex.app.R
 import com.termex.app.core.ssh.HostKeyVerificationResult
 
 @Composable
@@ -36,14 +38,14 @@ fun PasswordDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Password Required") },
+        title = { Text(stringResource(R.string.ssh_dialog_password_required)) },
         text = {
             Column {
-                Text("Enter password for $hostname")
+                Text(stringResource(R.string.ssh_dialog_enter_password, hostname))
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("Password") },
+                    label = { Text(stringResource(R.string.ssh_dialog_password_label)) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                     modifier = Modifier
@@ -54,12 +56,12 @@ fun PasswordDialog(
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(password) }) {
-                Text("Connect")
+                Text(stringResource(R.string.ssh_dialog_connect))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.action_cancel))
             }
         }
     )
@@ -80,7 +82,7 @@ fun HostKeyVerificationDialog(
         } else null,
         title = {
             Text(
-                text = if (isChanged) "Host Key Changed" else "Unknown Host",
+                text = if (isChanged) stringResource(R.string.ssh_dialog_host_key_changed) else stringResource(R.string.ssh_dialog_unknown_host),
                 fontWeight = FontWeight.Bold
             )
         },
@@ -88,9 +90,9 @@ fun HostKeyVerificationDialog(
             Column {
                 when (verification) {
                     is HostKeyVerificationResult.Unknown -> {
-                        Text("The authenticity of host '${verification.hostname}:${verification.port}' can't be established.")
+                        Text(stringResource(R.string.ssh_dialog_host_authenticity, verification.hostname, verification.port))
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("${verification.keyType} key fingerprint is:")
+                        Text(stringResource(R.string.ssh_dialog_key_fingerprint, verification.keyType))
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = verification.fingerprint,
@@ -98,34 +100,34 @@ fun HostKeyVerificationDialog(
                             fontSize = 12.sp
                         )
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("Are you sure you want to continue connecting?")
+                        Text(stringResource(R.string.ssh_dialog_continue_connecting))
                     }
                     is HostKeyVerificationResult.Changed -> {
                         Text(
-                            text = "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!",
+                            text = stringResource(R.string.ssh_dialog_host_key_warning),
                             color = MaterialTheme.colorScheme.error,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("It is possible that someone is doing something nasty!")
+                        Text(stringResource(R.string.ssh_dialog_possible_attack))
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("Host: ${verification.hostname}:${verification.port}")
+                        Text(stringResource(R.string.ssh_dialog_host_info, verification.hostname, verification.port))
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text("Old fingerprint:")
+                        Text(stringResource(R.string.ssh_dialog_old_fingerprint))
                         Text(
                             text = verification.oldFingerprint,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 12.sp
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text("New fingerprint:")
+                        Text(stringResource(R.string.ssh_dialog_new_fingerprint))
                         Text(
                             text = verification.newFingerprint,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 12.sp
                         )
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("If you expected this change (e.g., server reinstall), you can accept the new key.")
+                        Text(stringResource(R.string.ssh_dialog_accept_explanation))
                     }
                     is HostKeyVerificationResult.Trusted -> Unit
                 }
@@ -133,12 +135,12 @@ fun HostKeyVerificationDialog(
         },
         confirmButton = {
             TextButton(onClick = onAccept) {
-                Text(if (isChanged) "Accept New Key" else "Accept")
+                Text(if (isChanged) stringResource(R.string.ssh_dialog_accept_new_key) else stringResource(R.string.ssh_dialog_accept))
             }
         },
         dismissButton = {
             TextButton(onClick = onReject) {
-                Text("Reject")
+                Text(stringResource(R.string.ssh_dialog_reject))
             }
         }
     )

@@ -48,11 +48,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.termex.app.R
 import com.termex.app.core.ssh.SSHConnectionState
 import com.termex.app.ui.components.HostKeyVerificationDialog
 import com.termex.app.ui.components.PasswordDialog
@@ -102,17 +104,17 @@ fun TerminalScreen(
     if (showDisconnectConfirm) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showDisconnectConfirm = false },
-            title = { Text("Disconnect?") },
-            text = { Text("Are you sure you want to disconnect from ${currentServer?.hostname ?: "this server"}?") },
+            title = { Text(stringResource(R.string.terminal_disconnect_title)) },
+            text = { Text(stringResource(R.string.terminal_disconnect_message, currentServer?.hostname ?: "")) },
             confirmButton = {
                 TextButton(onClick = {
                     showDisconnectConfirm = false
                     viewModel.disconnect()
                     onNavigateBack()
-                }) { Text("Disconnect") }
+                }) { Text(stringResource(R.string.terminal_disconnect)) }
             },
             dismissButton = {
-                TextButton(onClick = { showDisconnectConfirm = false }) { Text("Cancel") }
+                TextButton(onClick = { showDisconnectConfirm = false }) { Text(stringResource(R.string.action_cancel)) }
             }
         )
     }
@@ -150,7 +152,7 @@ fun TerminalScreen(
         ) {
             Column(modifier = Modifier.padding(bottom = 32.dp)) {
                 Text(
-                    text = "Snippets",
+                    text = stringResource(R.string.title_snippets),
                     style = MaterialTheme.typography.titleMedium,
                     color = Color.White,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
@@ -164,7 +166,7 @@ fun TerminalScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "No snippets. Add them in the Snippets tab.",
+                            text = stringResource(R.string.terminal_no_snippets),
                             color = Color(0xFF636366),
                             style = MaterialTheme.typography.bodyMedium
                         )
@@ -204,11 +206,11 @@ fun TerminalScreen(
                     Column {
                         Text(
                             text = when (connectionState) {
-                                is SSHConnectionState.Connected -> currentServer?.displayName ?: "Terminal"
-                                is SSHConnectionState.Connecting -> "Connecting…"
-                                is SSHConnectionState.VerifyingHostKey -> "Verifying Host…"
-                                is SSHConnectionState.Error -> "Error"
-                                is SSHConnectionState.Disconnected -> "Disconnected"
+                                is SSHConnectionState.Connected -> currentServer?.displayName ?: stringResource(R.string.terminal_title)
+                                is SSHConnectionState.Connecting -> stringResource(R.string.terminal_connecting)
+                                is SSHConnectionState.VerifyingHostKey -> stringResource(R.string.terminal_verifying_host)
+                                is SSHConnectionState.Error -> stringResource(R.string.terminal_error)
+                                is SSHConnectionState.Disconnected -> stringResource(R.string.terminal_disconnected)
                             },
                             style = MaterialTheme.typography.titleMedium,
                             color = Color.White
@@ -304,8 +306,8 @@ fun TerminalScreen(
                             CircularProgressIndicator(color = Color(0xFF30D158))
                             Text(
                                 text = if (connectionState is SSHConnectionState.Connecting)
-                                    "Connecting to ${currentServer?.displayName ?: "server"}…"
-                                else "Verifying host key…",
+                                    stringResource(R.string.terminal_connecting_to, currentServer?.displayName ?: "")
+                                else stringResource(R.string.terminal_verifying_host_key),
                                 color = Color(0xFF98989D)
                             )
                         }
@@ -323,7 +325,7 @@ fun TerminalScreen(
                             modifier = Modifier.padding(32.dp)
                         ) {
                             Text(
-                                text = "Connection Failed",
+                                text = stringResource(R.string.terminal_connection_failed),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = Color(0xFFFF453A)
                             )
@@ -336,7 +338,7 @@ fun TerminalScreen(
                                 viewModel.disconnect()
                                 onNavigateBack()
                             }) {
-                                Text("Close", color = Color(0xFF0A84FF))
+                                Text(stringResource(R.string.action_close), color = Color(0xFF0A84FF))
                             }
                         }
                     }
@@ -404,9 +406,9 @@ fun TerminalScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(text = "Disconnected", color = Color(0xFF636366))
+                            Text(text = stringResource(R.string.terminal_disconnected), color = Color(0xFF636366))
                             TextButton(onClick = { viewModel.connect(serverId) }) {
-                                Text("Reconnect", color = Color(0xFF0A84FF))
+                                Text(stringResource(R.string.terminal_reconnect), color = Color(0xFF0A84FF))
                             }
                         }
                     }

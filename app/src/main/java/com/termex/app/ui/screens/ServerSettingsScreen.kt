@@ -42,11 +42,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.termex.app.R
 import com.termex.app.domain.AuthMode
 import com.termex.app.ui.viewmodel.ServerSettingsViewModel
 
@@ -83,7 +85,7 @@ fun ServerSettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (serverId == null) "New Server" else "Edit Server") },
+                title = { Text(if (serverId == null) stringResource(R.string.server_settings_title_new) else stringResource(R.string.server_settings_title_edit)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -108,13 +110,13 @@ fun ServerSettingsScreen(
                 .padding(16.dp)
         ) {
             // Connection Section
-            SectionHeader("CONNECTION")
+            SectionHeader(stringResource(R.string.server_settings_section_connection))
             SettingsCard {
                 OutlinedTextField(
                     value = formState.name,
                     onValueChange = { viewModel.updateName(it) },
-                    label = { Text("Display Name") },
-                    placeholder = { Text("Optional") },
+                    label = { Text(stringResource(R.string.server_settings_label_display_name)) },
+                    placeholder = { Text(stringResource(R.string.server_settings_placeholder_optional)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -124,8 +126,8 @@ fun ServerSettingsScreen(
                 OutlinedTextField(
                     value = formState.hostname,
                     onValueChange = { viewModel.updateHostname(it) },
-                    label = { Text("Host") },
-                    placeholder = { Text("example.com or IP address") },
+                    label = { Text(stringResource(R.string.server_settings_label_host)) },
+                    placeholder = { Text(stringResource(R.string.server_settings_placeholder_host)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -136,7 +138,7 @@ fun ServerSettingsScreen(
                     OutlinedTextField(
                         value = formState.port,
                         onValueChange = { viewModel.updatePort(it) },
-                        label = { Text("Port") },
+                        label = { Text(stringResource(R.string.server_settings_label_port)) },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
@@ -148,7 +150,7 @@ fun ServerSettingsScreen(
                 OutlinedTextField(
                     value = formState.username,
                     onValueChange = { viewModel.updateUsername(it) },
-                    label = { Text("Username") },
+                    label = { Text(stringResource(R.string.server_settings_label_username)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -157,15 +159,15 @@ fun ServerSettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             // Authentication Section
-            SectionHeader("AUTHENTICATION")
+            SectionHeader(stringResource(R.string.server_settings_section_auth))
             SettingsCard {
                 // Auth Mode
                 SettingsRow(
-                    title = "Method",
+                    title = stringResource(R.string.server_settings_label_method),
                     value = when (formState.authMode) {
-                        AuthMode.PASSWORD -> "Password"
-                        AuthMode.KEY -> "SSH Key"
-                        AuthMode.AUTO -> "Auto"
+                        AuthMode.PASSWORD -> stringResource(R.string.server_settings_auth_password)
+                        AuthMode.KEY -> stringResource(R.string.server_settings_auth_ssh_key)
+                        AuthMode.AUTO -> stringResource(R.string.server_settings_auth_auto)
                     },
                     onClick = { showAuthModeMenu = true }
                 )
@@ -174,21 +176,21 @@ fun ServerSettingsScreen(
                     onDismissRequest = { showAuthModeMenu = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Password") },
+                        text = { Text(stringResource(R.string.server_settings_auth_password)) },
                         onClick = {
                             viewModel.updateAuthMode(AuthMode.PASSWORD)
                             showAuthModeMenu = false
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("SSH Key") },
+                        text = { Text(stringResource(R.string.server_settings_auth_ssh_key)) },
                         onClick = {
                             viewModel.updateAuthMode(AuthMode.KEY)
                             showAuthModeMenu = false
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Auto (try both)") },
+                        text = { Text(stringResource(R.string.server_settings_auth_auto_try_both)) },
                         onClick = {
                             viewModel.updateAuthMode(AuthMode.AUTO)
                             showAuthModeMenu = false
@@ -204,8 +206,8 @@ fun ServerSettingsScreen(
                     OutlinedTextField(
                         value = formState.password,
                         onValueChange = { viewModel.updatePassword(it) },
-                        label = { Text("Password") },
-                        placeholder = { Text(if (formState.hasStoredPassword) "Password saved" else "Enter password") },
+                        label = { Text(stringResource(R.string.server_settings_auth_password)) },
+                        placeholder = { Text(if (formState.hasStoredPassword) stringResource(R.string.server_settings_placeholder_password_saved) else stringResource(R.string.server_settings_placeholder_enter_password)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         visualTransformation = if (showPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -227,7 +229,7 @@ fun ServerSettingsScreen(
                     )
                     if (formState.hasStoredPassword && formState.password.isEmpty()) {
                         Text(
-                            text = "Password is saved. Enter new password to change or tap X to remove.",
+                            text = stringResource(R.string.server_settings_password_saved_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp)
@@ -241,8 +243,8 @@ fun ServerSettingsScreen(
                 Spacer(modifier = Modifier.height(12.dp))
                 SettingsCard {
                     SettingsRow(
-                        title = "SSH Key",
-                        value = formState.selectedKeyName ?: "None",
+                        title = stringResource(R.string.server_settings_auth_ssh_key),
+                        value = formState.selectedKeyName ?: stringResource(R.string.server_settings_value_none),
                         onClick = { showKeyMenu = true }
                     )
                     DropdownMenu(
@@ -250,7 +252,7 @@ fun ServerSettingsScreen(
                         onDismissRequest = { showKeyMenu = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("None") },
+                            text = { Text(stringResource(R.string.server_settings_value_none)) },
                             onClick = {
                                 viewModel.updateSelectedKey(null, null)
                                 showKeyMenu = false
@@ -268,7 +270,7 @@ fun ServerSettingsScreen(
                     }
                     if (keys.isEmpty()) {
                         Text(
-                            text = "No SSH keys. Generate or import keys in the Keys tab.",
+                            text = stringResource(R.string.server_settings_no_ssh_keys_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp)
@@ -280,12 +282,12 @@ fun ServerSettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             // Advanced Section
-            SectionHeader("ADVANCED")
+            SectionHeader(stringResource(R.string.server_settings_section_advanced))
             SettingsCard {
                 // Jump Host
                 SettingsRow(
-                    title = "Jump Host",
-                    value = formState.jumpHostName ?: "None",
+                    title = stringResource(R.string.server_settings_label_jump_host),
+                    value = formState.jumpHostName ?: stringResource(R.string.server_settings_value_none),
                     onClick = { showJumpHostMenu = true }
                 )
                 DropdownMenu(
@@ -293,7 +295,7 @@ fun ServerSettingsScreen(
                     onDismissRequest = { showJumpHostMenu = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("None") },
+                        text = { Text(stringResource(R.string.server_settings_value_none)) },
                         onClick = {
                             viewModel.updateJumpHost(null, null)
                             showJumpHostMenu = false
@@ -314,8 +316,8 @@ fun ServerSettingsScreen(
 
                 // Forward Agent
                 ListItem(
-                    headlineContent = { Text("Forward Agent") },
-                    supportingContent = { Text("Forward SSH agent to remote host") },
+                    headlineContent = { Text(stringResource(R.string.server_settings_label_forward_agent)) },
+                    supportingContent = { Text(stringResource(R.string.server_settings_forward_agent_description)) },
                     trailingContent = {
                         Switch(
                             checked = formState.forwardAgent,

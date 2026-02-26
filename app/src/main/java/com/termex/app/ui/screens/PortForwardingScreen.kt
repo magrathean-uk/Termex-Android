@@ -39,8 +39,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.termex.app.R
 import com.termex.app.ui.components.HostKeyVerificationDialog
 import com.termex.app.ui.components.PasswordDialog
 import com.termex.app.domain.PortForwardType
@@ -79,7 +81,7 @@ fun PortForwardingScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Port Forwarding - ${server?.displayName ?: ""}") },
+                title = { Text(stringResource(R.string.port_forwarding_title, server?.displayName ?: "")) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -102,7 +104,7 @@ fun PortForwardingScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No port forwards configured.\nTap + to add one.")
+                Text(stringResource(R.string.port_forwarding_empty))
             }
         } else {
             LazyColumn(modifier = Modifier.padding(padding)) {
@@ -117,7 +119,7 @@ fun PortForwardingScreen(
                             if (error != null) {
                                 Text(error, color = MaterialTheme.colorScheme.error)
                             } else {
-                                Text(if (isActive) "Active" else "Inactive")
+                                Text(stringResource(if (isActive) R.string.port_forwarding_active else R.string.port_forwarding_inactive))
                             }
                         },
                         leadingContent = {
@@ -146,14 +148,14 @@ fun PortForwardingScreen(
 
         AlertDialog(
             onDismissRequest = { viewModel.dismissDialog() },
-            title = { Text(if (formState.isEditing) "Edit Port Forward" else "Add Port Forward") },
+            title = { Text(stringResource(if (formState.isEditing) R.string.port_forwarding_edit_title else R.string.port_forwarding_add_title)) },
             text = {
                 Column {
                     Box {
                         OutlinedTextField(
                             value = formState.type.name,
                             onValueChange = {},
-                            label = { Text("Type") },
+                            label = { Text(stringResource(R.string.port_forwarding_type)) },
                             readOnly = true,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -178,7 +180,7 @@ fun PortForwardingScreen(
                     OutlinedTextField(
                         value = formState.localPort,
                         onValueChange = { viewModel.updateLocalPort(it) },
-                        label = { Text("Local Port") },
+                        label = { Text(stringResource(R.string.port_forwarding_local_port)) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 8.dp)
@@ -188,7 +190,7 @@ fun PortForwardingScreen(
                         OutlinedTextField(
                             value = formState.remoteHost,
                             onValueChange = { viewModel.updateRemoteHost(it) },
-                            label = { Text("Remote Host") },
+                            label = { Text(stringResource(R.string.port_forwarding_remote_host)) },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 8.dp)
@@ -197,7 +199,7 @@ fun PortForwardingScreen(
                         OutlinedTextField(
                             value = formState.remotePort,
                             onValueChange = { viewModel.updateRemotePort(it) },
-                            label = { Text("Remote Port") },
+                            label = { Text(stringResource(R.string.port_forwarding_remote_port)) },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 8.dp)
@@ -211,12 +213,12 @@ fun PortForwardingScreen(
                     enabled = formState.localPort.isNotBlank() &&
                             (formState.type == PortForwardType.DYNAMIC || formState.remotePort.isNotBlank())
                 ) {
-                    Text("Save")
+                    Text(stringResource(R.string.action_save))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.dismissDialog() }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )

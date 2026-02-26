@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -37,36 +38,35 @@ data class OnboardingPage(
     val isFirstPage: Boolean = false
 )
 
-private val onboardingPages = listOf(
-    OnboardingPage(
-        iconResId = R.mipmap.ic_launcher,
-        title = "Welcome to Termex",
-        description = "A powerful SSH terminal client for Android. Connect to your servers securely from anywhere.",
-        isFirstPage = true
-    ),
-    OnboardingPage(
-        icon = Icons.Default.Dns,
-        title = "Manage Servers",
-        description = "Save your server connections with support for password and key-based authentication."
-    ),
-    OnboardingPage(
-        icon = Icons.Default.Key,
-        title = "SSH Key Management",
-        description = "Generate and import SSH keys directly on your device. Your private keys never leave your phone."
-    ),
-    OnboardingPage(
-        icon = Icons.Default.Code,
-        title = "Command Snippets",
-        description = "Save frequently used commands as snippets for quick access during your terminal sessions."
-    )
-)
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingFlow(
     onComplete: (demoModeActivated: Boolean) -> Unit,
     onEnableDemoMode: () -> Unit = {}
 ) {
+    val onboardingPages = listOf(
+        OnboardingPage(
+            iconResId = R.mipmap.ic_launcher,
+            title = stringResource(R.string.onboarding_welcome_title),
+            description = stringResource(R.string.onboarding_welcome_description),
+            isFirstPage = true
+        ),
+        OnboardingPage(
+            icon = Icons.Default.Dns,
+            title = stringResource(R.string.onboarding_servers_title),
+            description = stringResource(R.string.onboarding_servers_description)
+        ),
+        OnboardingPage(
+            icon = Icons.Default.Key,
+            title = stringResource(R.string.onboarding_keys_title),
+            description = stringResource(R.string.onboarding_keys_description)
+        ),
+        OnboardingPage(
+            icon = Icons.Default.Code,
+            title = stringResource(R.string.onboarding_snippets_title),
+            description = stringResource(R.string.onboarding_snippets_description)
+        )
+    )
     val pagerState = rememberPagerState(pageCount = { onboardingPages.size })
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -96,11 +96,11 @@ fun OnboardingFlow(
                                 logoTapCount >= 5 -> {
                                     demoModeActivated = true
                                     onEnableDemoMode()
-                                    Toast.makeText(context, "Demo mode enabled", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.onboarding_demo_mode_enabled), Toast.LENGTH_SHORT).show()
                                 }
                                 logoTapCount >= 3 -> {
                                     val remaining = 5 - logoTapCount
-                                    Toast.makeText(context, "$remaining taps to enable demo mode", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.onboarding_demo_mode_taps_remaining, remaining), Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
@@ -146,7 +146,7 @@ fun OnboardingFlow(
                             }
                         }
                     ) {
-                        Text("Skip")
+                        Text(stringResource(R.string.onboarding_skip))
                     }
                 } else {
                     Spacer(modifier = Modifier.width(1.dp))
@@ -164,8 +164,8 @@ fun OnboardingFlow(
                     }
                 ) {
                     Text(
-                        if (pagerState.currentPage == onboardingPages.lastIndex) "Get Started"
-                        else "Next"
+                        if (pagerState.currentPage == onboardingPages.lastIndex) stringResource(R.string.onboarding_get_started)
+                        else stringResource(R.string.onboarding_next)
                     )
                 }
             }
