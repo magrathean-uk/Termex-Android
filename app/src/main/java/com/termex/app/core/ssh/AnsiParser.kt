@@ -145,10 +145,28 @@ class AnsiParser {
                 State.OSC_ESC -> {
                     if (char == '\\') { // ST (String Terminator) = ESC \
                         result.add(ParsedSegment.OscCommand(escapeBuffer.toString()))
+                        state = State.NORMAL
+                        escapeBuffer.clear()
+                    } else {
+                        // Not a valid ST — the ESC started a new sequence
+                        result.add(ParsedSegment.OscCommand(escapeBuffer.toString()))
+                        escapeBuffer.clear()
+                        // Re-process as if we just saw ESC + this char
+                        state = State.ESC
+                        when (char) {
+                            '[' -> {
+                                state = State.CSI
+                                escapeBuffer.clear()
+                            }
+                            ']' -> {
+                                state = State.OSC
+                                escapeBuffer.clear()
+                            }
+                            else -> {
+                                state = State.NORMAL
+                            }
+                        }
                     }
-                    // Either way, done with OSC
-                    state = State.NORMAL
-                    escapeBuffer.clear()
                 }
             }
         }

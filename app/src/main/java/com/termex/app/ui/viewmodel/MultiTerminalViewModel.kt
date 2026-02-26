@@ -57,7 +57,7 @@ class MultiTerminalViewModel @Inject constructor(
     private val buffers = java.util.concurrent.ConcurrentHashMap<String, TerminalBuffer>()
     private val readJobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
     private val hostKeyDeferred = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
-    private val pendingPrompts = ArrayDeque<HostKeyPrompt>()
+    private val pendingPrompts = java.util.concurrent.ConcurrentLinkedDeque<HostKeyPrompt>()
 
     private val _selectedPane = MutableStateFlow<String?>(null)
     val selectedPane: StateFlow<String?> = _selectedPane.asStateFlow()
@@ -211,7 +211,7 @@ class MultiTerminalViewModel @Inject constructor(
     }
 
     private fun advancePrompt() {
-        _hostKeyPrompt.value = if (pendingPrompts.isEmpty()) null else pendingPrompts.removeFirst()
+        _hostKeyPrompt.value = if (pendingPrompts.isEmpty()) null else pendingPrompts.pollFirst()
     }
 
     private fun clearPromptForServer(serverId: String) {

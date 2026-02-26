@@ -344,13 +344,15 @@ class TerminalBuffer(
     
     private fun scrollDownRegion(amount: Int) {
         val absTop = viewportStart + scrollTop
-        val absBottom = viewportStart + scrollBottom
         
         for (i in 0 until amount) {
+            val absBottom = viewportStart + scrollBottom
             if (absBottom < lines.size) {
                 lines.removeAt(absBottom)
             }
-            lines.add(absTop, MutableTerminalLine().apply { ensureCapacity(cols) })
+            if (absTop <= lines.size) {
+                lines.add(absTop, MutableTerminalLine().apply { ensureCapacity(cols) })
+            }
         }
     }
     
@@ -399,9 +401,10 @@ class TerminalBuffer(
     }
     
     private fun insertLines(amount: Int) {
-        val absBottom = viewportStart + scrollBottom
         for (i in 0 until amount) {
+            val absBottom = viewportStart + scrollBottom
             if (cursorY <= absBottom) {
+                // Always remove bottom line first to keep buffer size stable
                 if (absBottom < lines.size) {
                     lines.removeAt(absBottom)
                 }
@@ -492,10 +495,9 @@ class TerminalBuffer(
     }
     
     private fun emitContentLocked() {
-        val startIndex = maxOf(0, viewportStart + rows - rows - scrollOffset)
         val actualStart = maxOf(viewportStart - scrollOffset, 0)
         val endIndex = minOf(lines.size, actualStart + rows)
-        val safeStart = maxOf(0, minOf(actualStart, lines.size))
+        val safeStart = minOf(actualStart, lines.size)
         
         _contentFlow.value = if (safeStart < endIndex) {
             lines.subList(safeStart, endIndex).map { line ->

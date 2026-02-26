@@ -258,7 +258,12 @@ class TerminalViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                // Connection closed or error
+                if (isActive) {
+                    android.util.Log.e("TerminalViewModel", "SSH read error", e)
+                    _connectionState.value = SSHConnectionState.Error(
+                        "Connection error: ${e.message ?: "unknown"}"
+                    )
+                }
             }
         }
     }

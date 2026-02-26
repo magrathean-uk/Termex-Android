@@ -113,8 +113,18 @@ fun TerminalKeyboard(
                             contentDescription = key.label,
                             onClick = {
                                 var sequence = key.sequence
-                                if (altActive) sequence = "\u001B" + sequence
-                                if (ctrlActive) sequence = "\u001B" + sequence
+                                // For arrow keys with modifiers, use CSI modifier syntax
+                                // ESC[1;5A = Ctrl+Up, ESC[1;3A = Alt+Up, ESC[1;7A = Ctrl+Alt+Up
+                                if ((ctrlActive || altActive) && sequence.startsWith("\u001B[") && sequence.length == 3) {
+                                    val modifier = when {
+                                        ctrlActive && altActive -> 7
+                                        ctrlActive -> 5
+                                        altActive -> 3
+                                        else -> 1
+                                    }
+                                    val cmd = sequence.last()
+                                    sequence = "\u001B[1;${modifier}${cmd}"
+                                }
                                 onKeyPress(sequence)
                             }
                         )

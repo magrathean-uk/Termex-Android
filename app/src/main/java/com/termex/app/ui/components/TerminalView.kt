@@ -121,6 +121,7 @@ fun TerminalView(
         Canvas(modifier = Modifier.fillMaxSize()) {
             val scaledCharWidth = charWidthPx
             val scaledLineHeight = lineHeightPx
+            val descent = scaledLineHeight * 0.2f // Proportional descent offset
             
             // Viewport culling: only draw visible lines
             val visibleRows = (size.height / scaledLineHeight).toInt() + 1
@@ -143,7 +144,7 @@ fun TerminalView(
                     if (cell.style.bgColor != AnsiParser.DEFAULT_BG) {
                         drawRect(
                             color = if (cell.style.inverse) cell.style.fgColor else cell.style.bgColor,
-                            topLeft = Offset(x, y - scaledLineHeight + 4),
+                            topLeft = Offset(x, y - scaledLineHeight + descent),
                             size = androidx.compose.ui.geometry.Size(scaledCharWidth, scaledLineHeight)
                         )
                     }
@@ -180,7 +181,7 @@ fun TerminalView(
                     if (showCursor && lineIndex == cursorPosition.second && cellIndex == cursorPosition.first) {
                         drawRect(
                             color = cursorColor,
-                            topLeft = Offset(x, y - scaledLineHeight + 4),
+                            topLeft = Offset(x, y - scaledLineHeight + descent),
                             size = androidx.compose.ui.geometry.Size(scaledCharWidth, scaledLineHeight)
                         )
                         // Redraw character on cursor with inverted color
