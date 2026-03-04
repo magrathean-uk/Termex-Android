@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -47,6 +48,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.nativeKeyCode
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -68,6 +77,7 @@ import com.termex.app.ui.viewmodel.TerminalViewModel
 fun TerminalScreen(
     serverId: String,
     onNavigateBack: () -> Unit,
+    onNavigateToPortForwarding: ((String) -> Unit)? = null,
     viewModel: TerminalViewModel = hiltViewModel()
 ) {
     val connectionState by viewModel.connectionState.collectAsState()
@@ -83,8 +93,8 @@ fun TerminalScreen(
 
     var ctrlActive by remember { mutableStateOf(false) }
     var altActive by remember { mutableStateOf(false) }
-    var showDisconnectConfirm by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     val focusRequester = remember { FocusRequester() }
     val snippetSheetState = rememberModalBottomSheetState()
 
@@ -92,32 +102,18 @@ fun TerminalScreen(
         viewModel.connect(serverId)
     }
 
-    BackHandler {
+    // Silently focus the hidden text field when connected so input is routed correctly.
+    // Does NOT call keyboardController.show() — keyboard only appears when user taps the terminal.
+    LaunchedEffect(connectionState) {
         if (connectionState is SSHConnectionState.Connected) {
-            showDisconnectConfirm = true
-        } else {
-            onNavigateBack()
+            try { focusRequester.requestFocus() } catch (_: Exception) {}
         }
     }
 
-    // Disconnect confirmation dialog
-    if (showDisconnectConfirm) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showDisconnectConfirm = false },
-            title = { Text(stringResource(R.string.terminal_disconnect_title)) },
-            text = { Text(stringResource(R.string.terminal_disconnect_message, currentServer?.hostname ?: "")) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDisconnectConfirm = false
-                    viewModel.disconnect()
-                    onNavigateBack()
-                }) { Text(stringResource(R.string.terminal_disconnect)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDisconnectConfirm = false }) { Text(stringResource(R.string.action_cancel)) }
-            }
-        )
-    }
+    // Back always navigates away without disconnecting — the session stays alive in the
+    // background (ConnectionManager singleton + foreground service). Use the red X button
+    // in the toolbar to explicitly disconnect.
+    BackHandler { onNavigateBack() }
 
     if (needsPassword) {
         PasswordDialog(
@@ -227,10 +223,7 @@ fun TerminalScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        viewModel.disconnect()
-                        onNavigateBack()
-                    }) {
+                    IconButton(onClick = { onNavigateBack() }) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
@@ -248,13 +241,11 @@ fun TerminalScreen(
                                 tint = Color(0xFF98989D)
                             )
                         }
-                        // Port Forwarding button (navigate back then to port forwarding)
+                        // Port Forwarding button
                         currentServer?.let { server ->
                             if (server.portForwards.isNotEmpty()) {
                                 IconButton(onClick = {
-                                    // Navigate to port forwarding for this server
-                                    // We pass a callback via the parent nav but can't easily do here
-                                    // Show a simple indicator instead
+                                    onNavigateToPortForwarding?.invoke(server.id)
                                 }) {
                                     Icon(
                                         Icons.Default.Dns,
@@ -334,11 +325,16 @@ fun TerminalScreen(
                                 color = Color(0xFF98989D),
                                 style = MaterialTheme.typography.bodyMedium
                             )
-                            TextButton(onClick = {
-                                viewModel.disconnect()
-                                onNavigateBack()
-                            }) {
-                                Text(stringResource(R.string.action_close), color = Color(0xFF0A84FF))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = { viewModel.connect(serverId) }) {
+                                    Text(stringResource(R.string.terminal_reconnect), color = Color(0xFF30D158))
+                                }
+                                TextButton(onClick = {
+                                    viewModel.disconnect()
+                                    onNavigateBack()
+                                }) {
+                                    Text(stringResource(R.string.action_close), color = Color(0xFF0A84FF))
+                                }
                             }
                         }
                     }
@@ -356,7 +352,10 @@ fun TerminalScreen(
                         backgroundColor = colorScheme.background,
                         foregroundColor = colorScheme.foreground,
                         cursorColor = colorScheme.cursor,
-                        onTap = { keyboardController?.show() },
+                        onTap = {
+                            try { focusRequester.requestFocus() } catch (_: Exception) {}
+                            keyboardController?.show()
+                        },
                         onScroll = { delta -> viewModel.scrollTerminal(delta) },
                         onSizeChanged = { cols, rows, widthPx, heightPx ->
                             viewModel.resizeTerminal(cols, rows, widthPx, heightPx)
@@ -375,6 +374,10 @@ fun TerminalScreen(
                                 ctrlActive = false
                                 altActive = false
                             }
+                        },
+                        onHideKeyboard = {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
                         }
                     )
 
@@ -389,7 +392,58 @@ fun TerminalScreen(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .focusRequester(focusRequester),
+                            .height(1.dp)
+                            .focusRequester(focusRequester)
+                            .onPreviewKeyEvent { keyEvent ->
+                                if (keyEvent.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                val isCtrl = keyEvent.isCtrlPressed
+                                when (keyEvent.key) {
+                                    // Navigation keys → ANSI sequences
+                                    Key.DirectionUp -> { viewModel.sendInput(if (isCtrl) "\u001b[1;5A" else "\u001b[A"); true }
+                                    Key.DirectionDown -> { viewModel.sendInput(if (isCtrl) "\u001b[1;5B" else "\u001b[B"); true }
+                                    Key.DirectionRight -> { viewModel.sendInput(if (isCtrl) "\u001b[1;5C" else "\u001b[C"); true }
+                                    Key.DirectionLeft -> { viewModel.sendInput(if (isCtrl) "\u001b[1;5D" else "\u001b[D"); true }
+                                    Key.Home -> { viewModel.sendInput(if (isCtrl) "\u001b[1;5H" else "\u001b[H"); true }
+                                    Key.MoveEnd -> { viewModel.sendInput(if (isCtrl) "\u001b[1;5F" else "\u001b[F"); true }
+                                    Key.PageUp -> { viewModel.sendInput("\u001b[5~"); true }
+                                    Key.PageDown -> { viewModel.sendInput("\u001b[6~"); true }
+                                    Key.Insert -> { viewModel.sendInput("\u001b[2~"); true }
+                                    Key.Delete -> { viewModel.sendInput("\u001b[3~"); true }
+                                    // Whitespace / control
+                                    Key.Enter -> { viewModel.sendInput("\r"); true }
+                                    Key.Tab -> { viewModel.sendInput("\t"); true }
+                                    Key.Escape -> { viewModel.sendInput("\u001b"); true }
+                                    Key.Backspace -> { viewModel.sendInput("\u007F"); true }
+                                    // Function keys
+                                    Key.F1 -> { viewModel.sendInput("\u001bOP"); true }
+                                    Key.F2 -> { viewModel.sendInput("\u001bOQ"); true }
+                                    Key.F3 -> { viewModel.sendInput("\u001bOR"); true }
+                                    Key.F4 -> { viewModel.sendInput("\u001bOS"); true }
+                                    Key.F5 -> { viewModel.sendInput("\u001b[15~"); true }
+                                    Key.F6 -> { viewModel.sendInput("\u001b[17~"); true }
+                                    Key.F7 -> { viewModel.sendInput("\u001b[18~"); true }
+                                    Key.F8 -> { viewModel.sendInput("\u001b[19~"); true }
+                                    Key.F9 -> { viewModel.sendInput("\u001b[20~"); true }
+                                    Key.F10 -> { viewModel.sendInput("\u001b[21~"); true }
+                                    Key.F11 -> { viewModel.sendInput("\u001b[23~"); true }
+                                    Key.F12 -> { viewModel.sendInput("\u001b[24~"); true }
+                                    else -> {
+                                        if (isCtrl) {
+                                            // Ctrl+A..Z → \x01..\x1a; Ctrl+[ → ESC
+                                            val rawChar = keyEvent.nativeKeyEvent.getUnicodeChar(0).toChar()
+                                            when {
+                                                rawChar.isLetter() -> {
+                                                    viewModel.sendInput((rawChar.lowercaseChar() - 'a' + 1).toChar().toString())
+                                                    true
+                                                }
+                                                rawChar == '[' -> { viewModel.sendInput("\u001b"); true }
+                                                else -> false
+                                            }
+                                        } else false
+                                        // Printable chars fall through to onValueChange (IME / soft keyboard path)
+                                    }
+                                }
+                            },
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Ascii,
                             imeAction = ImeAction.None

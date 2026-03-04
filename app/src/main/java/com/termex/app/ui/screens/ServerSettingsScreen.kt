@@ -57,6 +57,9 @@ import com.termex.app.ui.viewmodel.ServerSettingsViewModel
 fun ServerSettingsScreen(
     serverId: String?,
     onNavigateBack: () -> Unit,
+    prefillHost: String = "",
+    prefillPort: Int = 0,
+    prefillUser: String = "",
     viewModel: ServerSettingsViewModel = hiltViewModel()
 ) {
     val formState by viewModel.formState.collectAsState()
@@ -72,6 +75,11 @@ fun ServerSettingsScreen(
     LaunchedEffect(serverId) {
         if (serverId != null) {
             viewModel.loadServer(serverId)
+        } else if (prefillHost.isNotBlank()) {
+            // Pre-fill from SSH config browser import
+            viewModel.updateHostname(prefillHost)
+            if (prefillPort > 0) viewModel.updatePort(prefillPort.toString())
+            if (prefillUser.isNotBlank()) viewModel.updateUsername(prefillUser)
         }
     }
 
@@ -322,6 +330,21 @@ fun ServerSettingsScreen(
                         Switch(
                             checked = formState.forwardAgent,
                             onCheckedChange = { viewModel.updateForwardAgent(it) }
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
+                SettingsDivider()
+
+                // Identities Only — matches iOS ServerSettingsView behavior
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.server_settings_label_identities_only)) },
+                    supportingContent = { Text(stringResource(R.string.server_settings_identities_only_description)) },
+                    trailingContent = {
+                        Switch(
+                            checked = formState.identitiesOnly,
+                            onCheckedChange = { viewModel.updateIdentitiesOnly(it) }
                         )
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)

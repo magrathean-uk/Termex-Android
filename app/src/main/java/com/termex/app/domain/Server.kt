@@ -15,7 +15,8 @@ data class Server(
     val portForwards: List<PortForward> = emptyList(),
     val jumpHostId: String? = null,
     val forwardAgent: Boolean = false,
-    val isDemo: Boolean = false
+    val isDemo: Boolean = false,
+    val identitiesOnly: Boolean = false
 ) {
     val displayName: String
         get() = name.ifEmpty { hostname }

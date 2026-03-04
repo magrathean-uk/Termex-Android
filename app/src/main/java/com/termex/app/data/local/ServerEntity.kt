@@ -1,5 +1,6 @@
 package com.termex.app.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -24,7 +25,8 @@ data class ServerEntity(
     val portForwardsData: String? = null,
     val jumpHostId: String? = null,
     val forwardAgent: Boolean = false,
-    val isDemo: Boolean = false
+    val isDemo: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val identitiesOnly: Boolean = false
 )
 
 fun ServerEntity.toDomain(): Server {
@@ -42,7 +44,8 @@ fun ServerEntity.toDomain(): Server {
         portForwards = portForwards,
         jumpHostId = jumpHostId,
         forwardAgent = forwardAgent,
-        isDemo = isDemo
+        isDemo = isDemo,
+        identitiesOnly = identitiesOnly
     )
 }
 
@@ -61,6 +64,7 @@ fun Server.toEntity(): ServerEntity {
         portForwardsData = portForwardsJson,
         jumpHostId = jumpHostId,
         forwardAgent = forwardAgent,
-        isDemo = isDemo
+        isDemo = isDemo,
+        identitiesOnly = identitiesOnly
     )
 }

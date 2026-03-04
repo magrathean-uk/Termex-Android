@@ -123,12 +123,18 @@ class AnsiParser {
                     }
                 }
                 State.CSI -> {
+                    // Guard against malformed sequences from server causing OOM
+                    if (escapeBuffer.length > 256) {
+                        state = State.NORMAL
+                        escapeBuffer.clear()
+                    } else {
                     escapeBuffer.append(char)
                     // CSI sequence ends with a letter (0x40-0x7E)
                     if (char in '@'..'~') {
                         processCsiSequence(escapeBuffer.toString(), result)
                         state = State.NORMAL
                         escapeBuffer.clear()
+                    }
                     }
                 }
                 State.OSC -> {
@@ -139,6 +145,10 @@ class AnsiParser {
                             escapeBuffer.clear()
                         }
                         char == ESC -> state = State.OSC_ESC
+                        escapeBuffer.length > 1024 -> { // Guard against malformed OSC
+                            state = State.NORMAL
+                            escapeBuffer.clear()
+                        }
                         else -> escapeBuffer.append(char)
                     }
                 }

@@ -3,10 +3,9 @@ package com.termex.app.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.termex.app.core.demo.DemoTerminal
+import com.termex.app.core.ssh.ConnectionManager
 import com.termex.app.core.ssh.HostKeyVerificationCallback
 import com.termex.app.core.ssh.HostKeyVerificationResult
-import com.termex.app.core.ssh.SSHClient
-import com.termex.app.core.ssh.SSHConnectionConfig
 import com.termex.app.core.ssh.SSHConnectionState
 import com.termex.app.core.ssh.SshConfigBuilder
 import com.termex.app.core.ssh.TerminalBuffer
@@ -17,22 +16,22 @@ import com.termex.app.domain.ServerRepository
 import com.termex.app.domain.Snippet
 import com.termex.app.domain.SnippetRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 
 @HiltViewModel
 class TerminalViewModel @Inject constructor(
-    private val sshClient: SSHClient,
+    private val connectionManager: ConnectionManager,
     private val serverRepository: ServerRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val sshConfigBuilder: SshConfigBuilder,
@@ -40,40 +39,42 @@ class TerminalViewModel @Inject constructor(
     private val snippetRepository: SnippetRepository
 ) : ViewModel() {
 
+    // Session key — set when connect() is called, used to address ConnectionManager
+    @Volatile private var sessionKey: String? = null
+
+    // Local state flows — these mirror or derive from ConnectionManager session state
     private val _connectionState = MutableStateFlow<SSHConnectionState>(SSHConnectionState.Disconnected)
     val connectionState: StateFlow<SSHConnectionState> = _connectionState.asStateFlow()
 
-    // Expose buffer directly - its internal flows handle reactivity
-    private val terminalBuffer = TerminalBuffer()
-    val terminalLines: StateFlow<List<TerminalBuffer.TerminalLine>> = terminalBuffer.contentFlow
-    val cursorPosition: StateFlow<Pair<Int, Int>> = terminalBuffer.cursorPosition
+    // Terminal buffer and cursor come from ConnectionManager session (live as long as connection does)
+    private val _terminalLines = MutableStateFlow<List<TerminalBuffer.TerminalLine>>(emptyList())
+    val terminalLines: StateFlow<List<TerminalBuffer.TerminalLine>> = _terminalLines.asStateFlow()
+    private val _cursorPosition = MutableStateFlow(0 to 0)
+    val cursorPosition: StateFlow<Pair<Int, Int>> = _cursorPosition.asStateFlow()
 
     private val _currentServer = MutableStateFlow<Server?>(null)
     val currentServer: StateFlow<Server?> = _currentServer.asStateFlow()
 
-    private var readJob: Job? = null
-
-    // Demo mode support
+    // Demo mode
     private var demoTerminal: DemoTerminal? = null
     private var isInDemoMode = false
     private var globalDemoModeEnabled = false
 
-    // For credential prompting
+    // Credential prompting
     private val _needsPassword = MutableStateFlow(false)
     val needsPassword: StateFlow<Boolean> = _needsPassword.asStateFlow()
 
-    // For host key verification
+    // Host key verification
     private val _hostKeyVerification = MutableStateFlow<HostKeyVerificationResult?>(null)
     val hostKeyVerification: StateFlow<HostKeyVerificationResult?> = _hostKeyVerification.asStateFlow()
 
     private var pendingServerId: String? = null
-    private var hostKeyVerificationDeferred: CompletableDeferred<Boolean>? = null
 
     // Snippets
     val snippets: StateFlow<List<Snippet>> = snippetRepository.getAllSnippets()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    // Terminal settings (font, colors)
+    // Terminal settings
     val terminalSettings: StateFlow<TerminalSettings> = userPreferencesRepository.terminalSettingsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TerminalSettings())
 
@@ -89,93 +90,46 @@ class TerminalViewModel @Inject constructor(
     }
 
     init {
-        // Track global demo mode setting
         viewModelScope.launch {
             userPreferencesRepository.demoModeEnabledFlow.collect { enabled ->
                 globalDemoModeEnabled = enabled
             }
         }
-
-        // Sync connection state from SSH client
-        viewModelScope.launch {
-            sshClient.connectionState.collect { state ->
-                if (!isInDemoMode && _hostKeyVerification.value == null) {
-                    _connectionState.value = state
-                }
-            }
-        }
-
-        sshClient.setHostKeyVerificationCallback(object : HostKeyVerificationCallback {
-            override suspend fun onVerificationRequired(result: HostKeyVerificationResult): Boolean {
-                _hostKeyVerification.value = result
-                _connectionState.value = SSHConnectionState.VerifyingHostKey(result)
-                hostKeyVerificationDeferred = CompletableDeferred()
-                return hostKeyVerificationDeferred!!.await()
-            }
-        })
-    }
-
-    fun acceptHostKey() {
-        viewModelScope.launch {
-            val verification = _hostKeyVerification.value
-            if (verification != null) {
-                sshClient.trustHostKey(verification)
-                _hostKeyVerification.value = null
-                hostKeyVerificationDeferred?.complete(true)
-                hostKeyVerificationDeferred = null
-            }
-        }
-    }
-
-    fun rejectHostKey() {
-        _hostKeyVerification.value = null
-        hostKeyVerificationDeferred?.complete(false)
-        hostKeyVerificationDeferred = null
     }
 
     fun connect(serverId: String, password: String? = null) {
         viewModelScope.launch {
             _needsPassword.value = false
             _hostKeyVerification.value = null
-            hostKeyVerificationDeferred?.complete(false)
-            hostKeyVerificationDeferred = null
-            // Handle demo server specially
-            if (serverId == Server.DEMO_SERVER_ID) {
-                connectToDemo()
-                return@launch
-            }
 
-            // DEMO MODE: Block ALL real connections - only demo server works
+            if (serverId == Server.DEMO_SERVER_ID) { connectToDemo(); return@launch }
             if (globalDemoModeEnabled) {
                 _connectionState.value = SSHConnectionState.Error("Demo mode: Real connections disabled")
                 return@launch
             }
 
             val server = serverRepository.getServer(serverId)
-            if (server == null) {
-                _connectionState.value = SSHConnectionState.Error("Server not found")
-                return@launch
-            }
+            if (server == null) { _connectionState.value = SSHConnectionState.Error("Server not found"); return@launch }
             _currentServer.value = server
 
-            // Check if this is a demo server
-            if (server.isDemo) {
-                connectToDemo()
+            if (server.isDemo) { connectToDemo(); return@launch }
+
+            // Re-attach to an already-live connection — no need to reconnect
+            if (connectionManager.isConnected(serverId)) {
+                sessionKey = serverId
+                _connectionState.value = SSHConnectionState.Connected
+                observeSession(serverId)
                 return@launch
             }
 
             val config = sshConfigBuilder.buildConfig(server, password)
-            if (config == null) {
-                _connectionState.value = SSHConnectionState.Error("Invalid connection config")
-                return@launch
-            }
-            val shouldPromptPassword = config.password == null && config.privateKey == null
-            if (shouldPromptPassword) {
+            if (config == null) { _connectionState.value = SSHConnectionState.Error("Invalid connection config"); return@launch }
+            if (config.password == null && config.privateKey == null) {
                 pendingServerId = server.id
                 _needsPassword.value = true
                 return@launch
             }
-            performConnect(config)
+            performConnect(serverId, config)
         }
     }
 
@@ -183,195 +137,183 @@ class TerminalViewModel @Inject constructor(
         isInDemoMode = true
         _currentServer.value = Server.createDemoServer()
         _connectionState.value = SSHConnectionState.Connecting
-
         viewModelScope.launch {
-            // Small delay to simulate connection
             kotlinx.coroutines.delay(500)
-
             demoTerminal = DemoTerminal()
             demoTerminal?.reset()
-
-            // Write welcome message to terminal buffer
-            terminalBuffer.write(demoTerminal?.getWelcomeMessage() ?: "")
-
+            val demoBuffer = TerminalBuffer()
+            demoBuffer.write(demoTerminal?.getWelcomeMessage() ?: "")
+            _terminalLines.value = demoBuffer.contentFlow.value
             _connectionState.value = SSHConnectionState.Connected
-
-            // Start collecting demo output
-            readJob = viewModelScope.launch {
+            launch {
                 demoTerminal?.output?.collect { output ->
                     if (output.isNotEmpty()) {
-                        // Clear and rewrite - demo terminal manages its own state
-                        terminalBuffer.clear()
-                        terminalBuffer.write(output)
+                        demoBuffer.clear()
+                        demoBuffer.write(output)
+                        _terminalLines.value = demoBuffer.contentFlow.value
+                        _cursorPosition.value = demoBuffer.cursorPosition.value
                     }
                 }
             }
         }
     }
-    
+
     fun providePassword(password: String) {
         _needsPassword.value = false
-        val serverId = pendingServerId
+        val serverId = pendingServerId ?: return
         pendingServerId = null
-        if (serverId != null) {
-            viewModelScope.launch {
-                val server = serverRepository.getServer(serverId) ?: return@launch
-                val config = sshConfigBuilder.buildConfig(server, passwordOverride = password) ?: return@launch
-                performConnect(config)
-            }
+        viewModelScope.launch {
+            val server = serverRepository.getServer(serverId) ?: return@launch
+            val config = sshConfigBuilder.buildConfig(server, passwordOverride = password) ?: return@launch
+            performConnect(serverId, config)
         }
     }
-    
-    private suspend fun performConnect(config: SSHConnectionConfig) {
-        val result = sshClient.connect(config)
-        
+
+    private suspend fun performConnect(serverId: String, config: com.termex.app.core.ssh.SSHConnectionConfig) {
+        sessionKey = serverId
+
+        // Fire-and-forget callback — never blocks the MINA NIO2 thread
+        val hostKeyCallback = object : HostKeyVerificationCallback {
+            override fun onVerificationRequiredAsync(result: HostKeyVerificationResult) {
+                viewModelScope.launch {
+                    _hostKeyVerification.value = result
+                    _connectionState.value = SSHConnectionState.VerifyingHostKey(result)
+                }
+            }
+        }
+
+        _connectionState.value = SSHConnectionState.Connecting
+        val result = connectionManager.connect(serverId, config, hostKeyCallback)
         if (result.isSuccess) {
-            // Try to restore previous session state
-            _currentServer.value?.let { server ->
-                val restored = restoreSessionState(server.id)
-                if (restored != null) {
-                    // Session restored - terminal buffer already populated
-                } else {
-                    // No saved session - fresh connection
-                }
-            }
-            startReading()
+            observeSession(serverId)
+        } else {
+            _connectionState.value = SSHConnectionState.Error(
+                result.exceptionOrNull()?.message ?: "Connection failed"
+            )
         }
     }
-    
-    private fun startReading() {
-        readJob?.cancel()
-        readJob = viewModelScope.launch(Dispatchers.IO) {
-            val inputStream = sshClient.inputStream ?: return@launch
-            val reader = java.io.InputStreamReader(inputStream, Charsets.UTF_8)
-            val charBuffer = CharArray(4096)
-            
-            try {
-                while (isActive && sshClient.isConnected()) {
-                    val charsRead = reader.read(charBuffer)
-                    if (charsRead > 0) {
-                        val data = String(charBuffer, 0, charsRead)
-                        terminalBuffer.write(data)
-                    } else if (charsRead == -1) {
-                        sshClient.disconnect()
-                        break
-                    }
-                }
-            } catch (e: Exception) {
-                if (isActive) {
-                    android.util.Log.e("TerminalViewModel", "SSH read error", e)
-                    _connectionState.value = SSHConnectionState.Error(
-                        "Connection error: ${e.message ?: "unknown"}"
-                    )
+
+    private fun observeSession(serverId: String) {
+        // Mirror ConnectionManager state → ViewModel state
+        viewModelScope.launch {
+            connectionManager.getState(serverId)?.collect { state ->
+                if (!isInDemoMode && _hostKeyVerification.value == null) {
+                    _connectionState.value = state
                 }
             }
         }
+        // Mirror buffer → ViewModel lines
+        viewModelScope.launch {
+            connectionManager.getBuffer(serverId)?.let { buffer ->
+                buffer.contentFlow.collect { lines ->
+                    _terminalLines.value = lines
+                    _cursorPosition.value = buffer.cursorPosition.value
+                }
+            }
+        }
+        viewModelScope.launch {
+            connectionManager.getBuffer(serverId)?.cursorPosition?.collect { pos ->
+                _cursorPosition.value = pos
+            }
+        }
     }
-    
+
+    fun acceptHostKey() {
+        viewModelScope.launch {
+            val verification = _hostKeyVerification.value ?: return@launch
+            val key = sessionKey ?: return@launch
+            // Save key to DB, then clear the dialog and update state
+            connectionManager.trustHostKey(key, verification)
+            _hostKeyVerification.value = null
+            // Session is already connected (tentative accept returned true).
+            // Pull actual state from ConnectionManager; fall back to Connected since
+            // we know the connection succeeded (the dialog wouldn't appear otherwise).
+            _connectionState.value = connectionManager.getState(key)?.value
+                ?: SSHConnectionState.Connected
+        }
+    }
+
+    fun rejectHostKey() {
+        val key = sessionKey
+        _hostKeyVerification.value = null
+        _connectionState.value = SSHConnectionState.Disconnected
+        if (key != null) {
+            viewModelScope.launch { connectionManager.disconnect(key) }
+        }
+    }
+
     fun sendInput(data: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            val key = sessionKey
             if (isInDemoMode) {
                 demoTerminal?.processInput(data)
-            } else {
-                sshClient.sendData(data)
+            } else if (key != null) {
+                connectionManager.sendData(key, data)
             }
-            // Auto-scroll to bottom on input
-            terminalBuffer.scrollToBottom()
+            connectionManager.getBuffer(key ?: return@launch)?.scrollToBottom()
         }
     }
-    
-    fun sendKey(char: Char) {
-        sendInput(char.toString())
-    }
-    
+
+    fun sendKey(char: Char) = sendInput(char.toString())
+
     fun resizeTerminal(cols: Int, rows: Int) {
-        terminalBuffer.resize(cols, rows)
-        sshClient.resizeTerminal(cols, rows)
+        sessionKey?.let { connectionManager.resizeTerminal(it, cols, rows, 0, 0) }
     }
 
     fun resizeTerminal(cols: Int, rows: Int, widthPx: Int, heightPx: Int) {
-        terminalBuffer.resize(cols, rows)
-        sshClient.resizeTerminal(cols, rows, widthPx, heightPx)
+        sessionKey?.let { connectionManager.resizeTerminal(it, cols, rows, widthPx, heightPx) }
     }
-    
+
     fun scrollTerminal(deltaLines: Int) {
-        if (deltaLines > 0) {
-            terminalBuffer.scrollUp(deltaLines)
-        } else if (deltaLines < 0) {
-            terminalBuffer.scrollDown(-deltaLines)
+        sessionKey?.let {
+            val buffer = connectionManager.getBuffer(it) ?: return@let
+            if (deltaLines > 0) buffer.scrollUp(deltaLines) else buffer.scrollDown(-deltaLines)
         }
     }
-    
+
     fun disconnect() {
-        readJob?.cancel()
-        readJob = null
-        _hostKeyVerification.value = null
-        hostKeyVerificationDeferred?.complete(false)
-        hostKeyVerificationDeferred = null
-        _needsPassword.value = false
-
-        if (isInDemoMode) {
-            isInDemoMode = false
-            demoTerminal = null
-            _connectionState.value = SSHConnectionState.Disconnected
-        } else {
-            sshClient.disconnect()
+        val key = sessionKey ?: return
+        sessionKey = null
+        viewModelScope.launch(Dispatchers.IO) {
+            connectionManager.disconnect(key)
         }
-
-        terminalBuffer.clear()
+        _connectionState.value = SSHConnectionState.Disconnected
         _currentServer.value = null
     }
-    
+
     override fun onCleared() {
         super.onCleared()
-        sshClient.setHostKeyVerificationCallback(null)
-        
-        // Capture buffer content BEFORE disconnect clears it
+        val key = sessionKey
+        connectionManager.clearHostKeyCallback(key ?: return)
+        _hostKeyVerification.value = null
+
+        // Save session state in background — connection stays alive in ConnectionManager
         val server = _currentServer.value
-        val bufferSnapshot = if (server != null) {
-            try {
-                terminalBuffer.contentFlow.value
-                    .takeLast(500)
-                    .joinToString("\n") { line ->
-                        line.cells.joinToString("") { it.char.toString() }
-                    }
+        if (server != null && key != null) {
+            val bufferSnapshot = try {
+                connectionManager.getBuffer(key)?.contentFlow?.value
+                    ?.takeLast(500)
+                    ?.joinToString("\n") { line -> line.cells.joinToString("") { it.char.toString() } }
             } catch (_: Exception) { null }
-        } else null
-        
-        disconnect()
-        
-        // Save session with NonCancellable since viewModelScope is cancelled
-        if (server != null && bufferSnapshot != null) {
-            kotlinx.coroutines.CoroutineScope(Dispatchers.IO + NonCancellable).launch {
-                try {
-                    val sessionState = com.termex.app.domain.SessionState(
-                        id = java.util.UUID.randomUUID().toString(),
-                        serverId = server.id,
-                        terminalBuffer = bufferSnapshot,
-                        workingDirectory = null,
-                        connectedAt = System.currentTimeMillis(),
-                        lastActiveAt = System.currentTimeMillis()
-                    )
-                    sessionRepository.saveSession(sessionState)
-                } catch (_: Exception) {}
+            if (bufferSnapshot != null) {
+                @Suppress("OPT_IN_USAGE")
+                GlobalScope.launch(NonCancellable + Dispatchers.IO) {
+                    try {
+                        withTimeout(5_000) {
+                            val sessionState = com.termex.app.domain.SessionState(
+                                id = java.util.UUID.randomUUID().toString(),
+                                serverId = server.id,
+                                terminalBuffer = bufferSnapshot,
+                                workingDirectory = null,
+                                connectedAt = System.currentTimeMillis(),
+                                lastActiveAt = System.currentTimeMillis()
+                            )
+                            sessionRepository.saveSession(sessionState)
+                        }
+                    } catch (_: TimeoutCancellationException) {}
+                    catch (_: Exception) {}
+                }
             }
         }
-    }
-    
-    suspend fun restoreSessionState(serverId: String): com.termex.app.domain.SessionState? {
-        return try {
-            val session = sessionRepository.getLatestSessionForServer(serverId)
-            session?.let {
-                // Restore terminal buffer
-                terminalBuffer.write(it.terminalBuffer)
-            }
-            session
-        } catch (e: Exception) {
-            null
-        }
-    }
-    
-    suspend fun clearAllSessions() {
-        sessionRepository.deleteAllSessions()
     }
 }

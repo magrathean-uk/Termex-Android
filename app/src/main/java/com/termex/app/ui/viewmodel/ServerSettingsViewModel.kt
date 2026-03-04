@@ -30,7 +30,8 @@ data class ServerFormState(
     val selectedKeyName: String? = null,
     val jumpHostId: String? = null,
     val jumpHostName: String? = null,
-    val forwardAgent: Boolean = false
+    val forwardAgent: Boolean = false,
+    val identitiesOnly: Boolean = false
 )
 
 @HiltViewModel
@@ -77,7 +78,8 @@ class ServerSettingsViewModel @Inject constructor(
                 selectedKeyName = key?.name,
                 jumpHostId = server.jumpHostId,
                 jumpHostName = jumpHost?.displayName,
-                forwardAgent = server.forwardAgent
+                forwardAgent = server.forwardAgent,
+                identitiesOnly = server.identitiesOnly
             )
         }
     }
@@ -125,6 +127,10 @@ class ServerSettingsViewModel @Inject constructor(
         _formState.value = _formState.value.copy(forwardAgent = forwardAgent)
     }
 
+    fun updateIdentitiesOnly(identitiesOnly: Boolean) {
+        _formState.value = _formState.value.copy(identitiesOnly = identitiesOnly)
+    }
+
     fun triggerSave() {
         _isSaving.value = true
     }
@@ -156,7 +162,8 @@ class ServerSettingsViewModel @Inject constructor(
                 passwordKeychainID = passwordToSave,
                 keyId = form.keyId,
                 jumpHostId = form.jumpHostId,
-                forwardAgent = form.forwardAgent
+                forwardAgent = form.forwardAgent,
+                identitiesOnly = form.identitiesOnly
             )
 
             if (form.id != null) {

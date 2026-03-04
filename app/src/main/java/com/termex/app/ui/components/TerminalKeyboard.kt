@@ -43,7 +43,8 @@ fun TerminalKeyboard(
     altActive: Boolean = false,
     onCtrlToggle: () -> Unit = {},
     onAltToggle: () -> Unit = {},
-    onKeyPress: (String) -> Unit = {}
+    onKeyPress: (String) -> Unit = {},
+    onHideKeyboard: (() -> Unit)? = null
 ) {
     val scrollState = rememberScrollState()
     
@@ -86,11 +87,32 @@ fun TerminalKeyboard(
         tonalElevation = 4.dp
     ) {
         Row(
-            modifier = Modifier
-                .horizontalScroll(scrollState)
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            // Keyboard hide button — fixed on the left, outside scroll
+            if (onHideKeyboard != null) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clickable(onClick = onHideKeyboard)
+                        .padding(start = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Hide keyboard",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(scrollState)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
             keys.forEach { key ->
                 when {
                     key.label == "CTRL" -> {
@@ -147,7 +169,8 @@ fun TerminalKeyboard(
                     }
                 }
             }
-        }
+            } // end scrollable keys Row
+        } // end outer Row
     }
 }
 

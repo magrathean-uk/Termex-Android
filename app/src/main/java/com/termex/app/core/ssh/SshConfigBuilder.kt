@@ -5,7 +5,9 @@ import com.termex.app.data.prefs.UserPreferencesRepository
 import com.termex.app.domain.AuthMode
 import com.termex.app.domain.Server
 import com.termex.app.domain.ServerRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -28,8 +30,10 @@ class SshConfigBuilder @Inject constructor(
 
         val keyPath = server.keyId?.takeIf { it.isNotBlank() }
         val privateKeyBytes = keyPath?.let { path ->
-            val keyFile = File(path)
-            if (keyFile.exists()) keyFile.readBytes() else null
+            withContext(Dispatchers.IO) {
+                val keyFile = File(path)
+                if (keyFile.exists()) keyFile.readBytes() else null
+            }
         }
 
         val resolvedPassword = passwordOverride?.takeIf { it.isNotBlank() }

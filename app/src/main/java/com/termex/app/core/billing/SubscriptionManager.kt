@@ -1,6 +1,7 @@
 package com.termex.app.core.billing
 
 import android.app.Activity
+import android.util.Log
 import android.content.Context
 import com.android.billingclient.api.*
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -170,7 +171,8 @@ class SubscriptionManager @Inject constructor(
             .build()
         
         billingClient.acknowledgePurchase(params) { billingResult ->
-            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
+            if (billingResult.responseCode != BillingClient.BillingResponseCode.OK) {
+                Log.w("SubscriptionManager", "acknowledgePurchase failed: ${billingResult.debugMessage} (code ${billingResult.responseCode})")
             }
         }
     }

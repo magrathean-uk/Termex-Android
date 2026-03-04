@@ -205,6 +205,18 @@ fun PortForwardingScreen(
                                 .padding(top = 8.dp)
                         )
                     }
+
+                    // Bind address — shown for REMOTE forwards (iOS feature parity)
+                    if (formState.type == PortForwardType.REMOTE) {
+                        OutlinedTextField(
+                            value = formState.bindAddress,
+                            onValueChange = { viewModel.updateBindAddress(it) },
+                            label = { Text(stringResource(R.string.port_forwarding_bind_address)) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                        )
+                    }
                 }
             },
             confirmButton = {

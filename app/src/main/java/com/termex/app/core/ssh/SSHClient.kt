@@ -226,33 +226,31 @@ class SSHClient @Inject constructor(
     ): Pair<SshClient, ClientSession> {
         hostKeyVerifier.setTarget(verifyHost, verifyPort)
 
-        val client = SshClient.setUpDefaultClient()
-        client.serverKeyVerifier = hostKeyVerifier
-
-        CoreModuleProperties.IO_CONNECT_TIMEOUT.set(client, Duration.ofMillis(config.connectTimeoutMillis.toLong()))
-        CoreModuleProperties.AUTH_TIMEOUT.set(client, Duration.ofMillis(config.connectTimeoutMillis.toLong()))
-        CoreModuleProperties.CHANNEL_OPEN_TIMEOUT.set(client, Duration.ofMillis(config.connectTimeoutMillis.toLong()))
-        if (config.readTimeoutMillis > 0) {
-            CoreModuleProperties.NIO2_READ_TIMEOUT.set(client, Duration.ofMillis(config.readTimeoutMillis.toLong()))
-        }
-        if (config.keepAliveIntervalSeconds > 0) {
-            CoreModuleProperties.HEARTBEAT_INTERVAL.set(
-                client,
-                Duration.ofSeconds(config.keepAliveIntervalSeconds.toLong())
-            )
-        }
-        CoreModuleProperties.ABORT_ON_INVALID_CERTIFICATE.set(client, config.verifyHostKeyCertificates)
-        if (!config.verifyHostKeyCertificates) {
-            val factories = client.signatureFactories
-            if (!factories.isNullOrEmpty()) {
-                val filtered = factories.filterNot { it.name.contains("-cert-v01@openssh.com") }
-                if (filtered.isNotEmpty()) {
-                    client.signatureFactories = filtered
+        // Serialize MINA client init to prevent NIO thread pool contention under parallel connects
+        val client = synchronized(minaInitLock) {
+            val c = SshClient.setUpDefaultClient()
+            c.serverKeyVerifier = hostKeyVerifier
+            CoreModuleProperties.IO_CONNECT_TIMEOUT.set(c, Duration.ofMillis(config.connectTimeoutMillis.toLong()))
+            // AUTH_TIMEOUT must be long enough for the user to review a host key dialog (up to 2 min)
+            CoreModuleProperties.AUTH_TIMEOUT.set(c, Duration.ofSeconds(120))
+            CoreModuleProperties.CHANNEL_OPEN_TIMEOUT.set(c, Duration.ofMillis(config.connectTimeoutMillis.toLong()))
+            if (config.keepAliveIntervalSeconds > 0) {
+                CoreModuleProperties.HEARTBEAT_INTERVAL.set(
+                    c,
+                    Duration.ofSeconds(config.keepAliveIntervalSeconds.toLong())
+                )
+            }
+            CoreModuleProperties.ABORT_ON_INVALID_CERTIFICATE.set(c, config.verifyHostKeyCertificates)
+            if (!config.verifyHostKeyCertificates) {
+                val factories = c.signatureFactories
+                if (!factories.isNullOrEmpty()) {
+                    val filtered = factories.filterNot { it.name.contains("-cert-v01@openssh.com") }
+                    if (filtered.isNotEmpty()) c.signatureFactories = filtered
                 }
             }
+            c.start()
+            c
         }
-
-        client.start()
         var session: ClientSession? = null
         try {
             session = client.connect(config.username, connectHost, connectPort)
@@ -291,7 +289,8 @@ class SSHClient @Inject constructor(
         CoreModuleProperties.PREFERRED_AUTHS.set(session, preferredOrder.joinToString(","))
 
         val authFuture = session.auth()
-        authFuture.verify(config.connectTimeoutMillis.toLong())
+        // 120 s: must cover host-key dialog wait (user has time to read and respond)
+        authFuture.verify(120_000L)
         if (!authFuture.isSuccess) {
             throw IllegalStateException("Authentication failed")
         }
@@ -394,6 +393,10 @@ class SSHClient @Inject constructor(
     }
 
     companion object {
+        // Serializes MINA SshClient setup+start to prevent NIO thread pool contention
+        // when multiple connections are initiated simultaneously.
+        private val minaInitLock = Any()
+
         @Volatile
         private var providerInitialized = false
 

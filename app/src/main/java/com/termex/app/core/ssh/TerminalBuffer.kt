@@ -81,6 +81,10 @@ class TerminalBuffer(
     
     fun write(data: String) {
         synchronized(lock) {
+            // Snap to bottom on any new output (matches standard terminal behavior).
+            // The user can scroll up while idle; new output always shows the latest content.
+            scrollOffset = 0
+
             val segments = ansiParser.parse(data)
 
             for (segment in segments) {

@@ -83,7 +83,8 @@ private val AccentTeal = Color(0xFF00D4AA)
 @Composable
 fun PaywallScreen(
     onSubscribed: () -> Unit,
-    onRestore: () -> Unit
+    onRestore: () -> Unit,
+    onDemoMode: (() -> Unit)? = null
 ) {
     val appViewModel: AppViewModel = hiltViewModel()
     val context = LocalContext.current
@@ -406,6 +407,20 @@ fun PaywallScreen(
                         )
                     ) {
                         Text(stringResource(R.string.action_restore_purchases))
+                    }
+
+                    // Demo mode option — matches iOS PaywallView behavior
+                    if (onDemoMode != null) {
+                        TextButton(
+                            onClick = onDemoMode,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = stringResource(R.string.paywall_try_demo_mode),
+                                color = Color.White.copy(alpha = 0.45f),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
                 }
             }

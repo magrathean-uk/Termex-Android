@@ -69,7 +69,7 @@ fun MainTabs(
         NavHost(
             navController = navController,
             startDestination = Route.Servers.route,
-            modifier = Modifier.padding(padding),
+            modifier = Modifier.padding(bottom = padding.calculateBottomPadding()),
             enterTransition = { fadeIn(animationSpec = tween(300)) },
             exitTransition = { fadeOut(animationSpec = tween(200)) },
             popEnterTransition = { fadeIn(animationSpec = tween(300)) },

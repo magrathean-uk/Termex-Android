@@ -14,12 +14,13 @@ data class PortForward(
     val localPort: Int,
     val remoteHost: String = "localhost",
     val remotePort: Int,
-    val enabled: Boolean = true
+    val enabled: Boolean = true,
+    val bindAddress: String = "127.0.0.1"
 ) {
     val displayString: String
         get() = when (type) {
             PortForwardType.LOCAL -> "L:$localPort -> $remoteHost:$remotePort"
-            PortForwardType.REMOTE -> "R:$remotePort -> localhost:$localPort"
+            PortForwardType.REMOTE -> "R:$bindAddress:$remotePort -> localhost:$localPort"
             PortForwardType.DYNAMIC -> "D:$localPort (SOCKS)"
         }
 }

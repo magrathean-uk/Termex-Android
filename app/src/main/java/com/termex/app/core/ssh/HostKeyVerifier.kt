@@ -3,7 +3,6 @@ package com.termex.app.core.ssh
 import com.termex.app.domain.KnownHost
 import com.termex.app.domain.KnownHostRepository
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import org.apache.sshd.client.keyverifier.ServerKeyVerifier
 import org.apache.sshd.client.session.ClientSession
 import java.net.InetSocketAddress
@@ -32,11 +31,12 @@ sealed class HostKeyVerificationResult {
 }
 
 /**
- * Callback interface for host key verification decisions.
- * Used by SSHClient to get user decision asynchronously.
+ * Callback interface for host key verification.
+ * Called fire-and-forget from verifyServerKey() so the NIO2 thread is NEVER blocked.
+ * The user decision (accept/reject) is handled asynchronously in the ViewModel.
  */
 interface HostKeyVerificationCallback {
-    suspend fun onVerificationRequired(result: HostKeyVerificationResult): Boolean
+    fun onVerificationRequiredAsync(result: HostKeyVerificationResult)
 }
 
 class TermexHostKeyVerifier @Inject constructor(
@@ -48,9 +48,6 @@ class TermexHostKeyVerifier @Inject constructor(
 
     @Volatile
     private var verificationCallback: HostKeyVerificationCallback? = null
-
-    @Volatile
-    private var lastVerificationResult: Boolean = false
 
     @Volatile
     private var targetHost: String? = null
@@ -80,9 +77,40 @@ class TermexHostKeyVerifier @Inject constructor(
     ): Boolean {
         if (serverKey == null) return false
         val (hostname, port) = resolveTarget(remoteAddress)
-        return runBlocking {
-            withTimeout(120_000L) {
-                verifyAsync(hostname, port, serverKey)
+        val fingerprint = KeyUtils.calculateFingerprint(serverKey)
+        val keyType = KeyUtils.getKeyTypeString(serverKey.algorithm)
+
+        // runBlocking is acceptable here for a brief DB read on this background thread
+        val existingHost = runBlocking { knownHostRepository.getKnownHost(hostname, port) }
+
+        return when {
+            existingHost != null && existingHost.fingerprint == fingerprint -> {
+                // Known and trusted — update last-seen timestamp, proceed immediately
+                runBlocking { knownHostRepository.updateKnownHost(existingHost.copy(lastSeenAt = Date())) }
+                true
+            }
+            existingHost != null -> {
+                // Key has changed — warn user, tentatively accept so connection can complete,
+                // ViewModel will disconnect if user rejects
+                val result = HostKeyVerificationResult.Changed(
+                    hostname = hostname, port = port, keyType = keyType,
+                    newFingerprint = fingerprint, oldFingerprint = existingHost.fingerprint,
+                    publicKey = serverKey
+                )
+                pendingVerification = result
+                verificationCallback?.onVerificationRequiredAsync(result)
+                true
+            }
+            else -> {
+                // Unknown host — tentatively accept so connection can complete,
+                // ViewModel will disconnect if user rejects
+                val result = HostKeyVerificationResult.Unknown(
+                    hostname = hostname, port = port, keyType = keyType,
+                    fingerprint = fingerprint, publicKey = serverKey
+                )
+                pendingVerification = result
+                verificationCallback?.onVerificationRequiredAsync(result)
+                true
             }
         }
     }
@@ -97,61 +125,6 @@ class TermexHostKeyVerifier @Inject constructor(
         val resolvedHost = inet?.hostString ?: "unknown"
         val resolvedPort = inet?.port ?: 22
         return resolvedHost to resolvedPort
-    }
-
-    private suspend fun verifyAsync(hostname: String, port: Int, key: PublicKey): Boolean {
-        val fingerprint = KeyUtils.calculateFingerprint(key)
-        val keyType = KeyUtils.getKeyTypeString(key.algorithm)
-
-        val existingHost = knownHostRepository.getKnownHost(hostname, port)
-
-        val result = when {
-            existingHost == null -> {
-                // New host - ask user
-                HostKeyVerificationResult.Unknown(
-                    hostname = hostname,
-                    port = port,
-                    keyType = keyType,
-                    fingerprint = fingerprint,
-                    publicKey = key
-                )
-            }
-            existingHost.fingerprint == fingerprint -> {
-                // Known host with matching key - update last seen and accept
-                knownHostRepository.updateKnownHost(
-                    existingHost.copy(lastSeenAt = Date())
-                )
-                HostKeyVerificationResult.Trusted
-            }
-            else -> {
-                // Key has changed - potential MITM attack
-                HostKeyVerificationResult.Changed(
-                    hostname = hostname,
-                    port = port,
-                    keyType = keyType,
-                    newFingerprint = fingerprint,
-                    oldFingerprint = existingHost.fingerprint,
-                    publicKey = key
-                )
-            }
-        }
-
-        return when (result) {
-            is HostKeyVerificationResult.Trusted -> true
-            is HostKeyVerificationResult.Unknown,
-            is HostKeyVerificationResult.Changed -> {
-                pendingVerification = result
-                // Ask callback for decision
-                val callback = verificationCallback
-                if (callback != null) {
-                    lastVerificationResult = callback.onVerificationRequired(result)
-                    lastVerificationResult
-                } else {
-                    // No callback - reject by default for security
-                    false
-                }
-            }
-        }
     }
 
     suspend fun trustHostKey(result: HostKeyVerificationResult) {

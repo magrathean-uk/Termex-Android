@@ -132,41 +132,63 @@ fun OnboardingFlow(
             }
 
             // Bottom buttons
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                if (pagerState.currentPage < onboardingPages.lastIndex) {
-                    TextButton(
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (pagerState.currentPage < onboardingPages.lastIndex) {
+                        TextButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(onboardingPages.lastIndex)
+                                }
+                            }
+                        ) {
+                            Text(stringResource(R.string.onboarding_skip))
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.width(1.dp))
+                    }
+
+                    Button(
                         onClick = {
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(onboardingPages.lastIndex)
+                            if (pagerState.currentPage == onboardingPages.lastIndex) {
+                                onComplete(demoModeActivated)
+                            } else {
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                                }
                             }
                         }
                     ) {
-                        Text(stringResource(R.string.onboarding_skip))
+                        Text(
+                            if (pagerState.currentPage == onboardingPages.lastIndex) stringResource(R.string.onboarding_get_started)
+                            else stringResource(R.string.onboarding_next)
+                        )
                     }
-                } else {
-                    Spacer(modifier = Modifier.width(1.dp))
                 }
 
-                Button(
-                    onClick = {
-                        if (pagerState.currentPage == onboardingPages.lastIndex) {
-                            onComplete(demoModeActivated)
-                        } else {
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                            }
+                // Explicit "Try Demo Mode" button on the last page — matches iOS behavior
+                if (pagerState.currentPage == onboardingPages.lastIndex && !demoModeActivated) {
+                    TextButton(
+                        onClick = {
+                            demoModeActivated = true
+                            onEnableDemoMode()
                         }
+                    ) {
+                        Text(
+                            text = stringResource(R.string.onboarding_try_demo_mode),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
-                ) {
-                    Text(
-                        if (pagerState.currentPage == onboardingPages.lastIndex) stringResource(R.string.onboarding_get_started)
-                        else stringResource(R.string.onboarding_next)
-                    )
                 }
             }
         }
@@ -179,13 +201,27 @@ private fun OnboardingPageContent(
     onLogoTap: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier.padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    val windowWidth = LocalContext.current.resources.configuration.screenWidthDp.dp
+    val isTablet = windowWidth >= 600.dp
+    val iconSize = if (isTablet) 180.dp else 120.dp
+    val titleStyle = if (isTablet) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium
+    val bodyStyle = if (isTablet) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge
+    val topSpacing = if (isTablet) 48.dp else 32.dp
+    val betweenSpacing = if (isTablet) 24.dp else 16.dp
+
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
     ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = if (isTablet) 640.dp else Int.MAX_VALUE.dp)
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
         val iconModifier = Modifier
-            .size(120.dp)
+            .size(iconSize)
             .then(
                 if (onLogoTap != null) {
                     Modifier.clickable(
@@ -214,21 +250,22 @@ private fun OnboardingPageContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(topSpacing))
 
         Text(
             text = page.title,
-            style = MaterialTheme.typography.headlineMedium,
+            style = titleStyle,
             textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(betweenSpacing))
 
         Text(
             text = page.description,
-            style = MaterialTheme.typography.bodyLarge,
+            style = bodyStyle,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
         )
+        }
     }
 }

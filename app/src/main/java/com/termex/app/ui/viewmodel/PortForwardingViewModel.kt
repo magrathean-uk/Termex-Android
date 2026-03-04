@@ -29,6 +29,7 @@ data class PortForwardFormState(
     val localPort: String = "",
     val remoteHost: String = "localhost",
     val remotePort: String = "",
+    val bindAddress: String = "127.0.0.1",
     val isEditing: Boolean = false,
     val editingId: String? = null
 )
@@ -108,6 +109,7 @@ class PortForwardingViewModel @Inject constructor(
             localPort = portForward.localPort.toString(),
             remoteHost = portForward.remoteHost,
             remotePort = portForward.remotePort.toString(),
+            bindAddress = portForward.bindAddress,
             isEditing = true,
             editingId = portForward.id
         )
@@ -135,6 +137,10 @@ class PortForwardingViewModel @Inject constructor(
         _formState.value = _formState.value.copy(remotePort = port.filter { it.isDigit() })
     }
 
+    fun updateBindAddress(address: String) {
+        _formState.value = _formState.value.copy(bindAddress = address)
+    }
+
     fun savePortForward() {
         val form = _formState.value
         val localPort = form.localPort.toIntOrNull() ?: return
@@ -151,7 +157,8 @@ class PortForwardingViewModel @Inject constructor(
                         type = form.type,
                         localPort = localPort,
                         remoteHost = form.remoteHost,
-                        remotePort = remotePort
+                        remotePort = remotePort,
+                        bindAddress = form.bindAddress
                     )
                 }
             } else {
@@ -160,7 +167,8 @@ class PortForwardingViewModel @Inject constructor(
                         type = form.type,
                         localPort = localPort,
                         remoteHost = form.remoteHost,
-                        remotePort = remotePort
+                        remotePort = remotePort,
+                        bindAddress = form.bindAddress
                     )
                 )
             }

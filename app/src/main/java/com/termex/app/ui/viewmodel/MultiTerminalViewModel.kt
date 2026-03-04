@@ -3,27 +3,24 @@ package com.termex.app.ui.viewmodel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.termex.app.core.ssh.ConnectionManager
 import com.termex.app.core.ssh.HostKeyVerificationCallback
 import com.termex.app.core.ssh.HostKeyVerificationResult
-import com.termex.app.core.ssh.SSHClient
 import com.termex.app.core.ssh.SSHConnectionState
 import com.termex.app.core.ssh.SshConfigBuilder
 import com.termex.app.core.ssh.TerminalBuffer
 import com.termex.app.domain.Server
 import com.termex.app.domain.WorkplaceRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedDeque
 import javax.inject.Inject
-import javax.inject.Provider
 
 data class TerminalPaneState(
     val server: Server,
@@ -41,7 +38,7 @@ data class HostKeyPrompt(
 class MultiTerminalViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val workplaceRepository: WorkplaceRepository,
-    private val sshClientProvider: Provider<SSHClient>,
+    private val connectionManager: ConnectionManager,
     private val sshConfigBuilder: SshConfigBuilder
 ) : ViewModel() {
 
@@ -53,11 +50,9 @@ class MultiTerminalViewModel @Inject constructor(
     private val _paneStates = MutableStateFlow<Map<String, TerminalPaneState>>(emptyMap())
     val paneStates: StateFlow<Map<String, TerminalPaneState>> = _paneStates.asStateFlow()
 
-    private val clients = java.util.concurrent.ConcurrentHashMap<String, SSHClient>()
-    private val buffers = java.util.concurrent.ConcurrentHashMap<String, TerminalBuffer>()
-    private val readJobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
-    private val hostKeyDeferred = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
-    private val pendingPrompts = java.util.concurrent.ConcurrentLinkedDeque<HostKeyPrompt>()
+    private val pendingPrompts = ConcurrentLinkedDeque<HostKeyPrompt>()
+    // Guard against duplicate coroutine collectors per pane
+    private val observedPanes = ConcurrentHashMap.newKeySet<String>()
 
     private val _selectedPane = MutableStateFlow<String?>(null)
     val selectedPane: StateFlow<String?> = _selectedPane.asStateFlow()
@@ -70,28 +65,26 @@ class MultiTerminalViewModel @Inject constructor(
     }
 
     fun connectServer(server: Server, password: String? = null) {
-        if (clients.containsKey(server.id)) return
+        // Re-attach to already-live session without reconnecting
+        if (connectionManager.isConnected(server.id)) {
+            updatePaneState(server.id) { it.copy(connectionState = SSHConnectionState.Connected) }
+            observePane(server.id)
+            return
+        }
 
         viewModelScope.launch {
-            val client = sshClientProvider.get()
-            clients[server.id] = client
-
-            val buffer = TerminalBuffer()
-            buffers[server.id] = buffer
-
             updatePaneState(server.id) { it.copy(connectionState = SSHConnectionState.Connecting) }
 
-            client.setHostKeyVerificationCallback(object : HostKeyVerificationCallback {
-                override suspend fun onVerificationRequired(result: HostKeyVerificationResult): Boolean {
-                    updatePaneState(server.id) {
-                        it.copy(connectionState = SSHConnectionState.VerifyingHostKey(result))
+            val hostKeyCallback = object : HostKeyVerificationCallback {
+                override fun onVerificationRequiredAsync(result: HostKeyVerificationResult) {
+                    viewModelScope.launch {
+                        updatePaneState(server.id) {
+                            it.copy(connectionState = SSHConnectionState.VerifyingHostKey(result))
+                        }
+                        enqueuePrompt(HostKeyPrompt(server.id, result))
                     }
-                    val deferred = CompletableDeferred<Boolean>()
-                    hostKeyDeferred[server.id] = deferred
-                    enqueuePrompt(HostKeyPrompt(server.id, result))
-                    return deferred.await()
                 }
-            })
+            }
 
             val config = sshConfigBuilder.buildConfig(server, password)
             if (config == null || (config.password == null && config.privateKey == null)) {
@@ -101,89 +94,89 @@ class MultiTerminalViewModel @Inject constructor(
                 return@launch
             }
 
-            val result = client.connect(config)
-
+            val result = connectionManager.connect(server.id, config, hostKeyCallback)
             if (result.isSuccess) {
                 updatePaneState(server.id) { it.copy(connectionState = SSHConnectionState.Connected) }
-                startReading(server.id, client, buffer)
+                observePane(server.id)
             } else {
                 updatePaneState(server.id) {
-                    it.copy(connectionState = SSHConnectionState.Error(result.exceptionOrNull()?.message ?: "Failed"))
+                    it.copy(connectionState = SSHConnectionState.Error(
+                        result.exceptionOrNull()?.message ?: "Failed"
+                    ))
                 }
             }
         }
     }
 
-    private fun startReading(serverId: String, client: SSHClient, buffer: TerminalBuffer) {
-        readJobs[serverId]?.cancel()
-        readJobs[serverId] = viewModelScope.launch(Dispatchers.IO) {
-            val inputStream = client.inputStream ?: return@launch
-            val reader = java.io.InputStreamReader(inputStream, Charsets.UTF_8)
-            val charBuffer = CharArray(4096)
+    private fun observePane(serverId: String) {
+        // Prevent duplicate collectors if already observing this pane
+        if (!observedPanes.add(serverId)) return
 
-            try {
-                while (isActive && client.isConnected()) {
-                    val charsRead = reader.read(charBuffer)
-                    if (charsRead > 0) {
-                        val data = String(charBuffer, 0, charsRead)
-                        buffer.write(data)
-                        updatePaneState(serverId) {
-                            it.copy(
-                                lines = buffer.contentFlow.value,
-                                cursorPosition = buffer.cursorPosition.value
-                            )
-                        }
-                    } else if (charsRead == -1) {
-                        updatePaneState(serverId) {
-                            it.copy(connectionState = SSHConnectionState.Disconnected)
-                        }
-                        break
+        // Mirror ConnectionManager session state → pane state
+        viewModelScope.launch {
+            connectionManager.getState(serverId)?.collect { state ->
+                updatePaneState(serverId) { it.copy(connectionState = state) }
+            }
+        }
+        // Mirror buffer content → pane lines
+        viewModelScope.launch {
+            connectionManager.getBuffer(serverId)?.let { buffer ->
+                buffer.contentFlow.collect { lines ->
+                    updatePaneState(serverId) {
+                        it.copy(lines = lines, cursorPosition = buffer.cursorPosition.value)
                     }
                 }
-            } catch (e: Exception) {
-                // Connection closed
+            }
+        }
+        viewModelScope.launch {
+            connectionManager.getBuffer(serverId)?.cursorPosition?.collect { pos ->
+                updatePaneState(serverId) { it.copy(cursorPosition = pos) }
             }
         }
     }
 
     fun sendInput(serverId: String, data: String) {
-        viewModelScope.launch {
-            clients[serverId]?.sendData(data)
-        }
+        connectionManager.sendData(serverId, data)
+    }
+
+    fun resizeTerminal(serverId: String, cols: Int, rows: Int, widthPx: Int, heightPx: Int) {
+        connectionManager.resizeTerminal(serverId, cols, rows, widthPx, heightPx)
     }
 
     fun disconnectServer(serverId: String) {
-        readJobs[serverId]?.cancel()
-        readJobs.remove(serverId)
-        hostKeyDeferred.remove(serverId)?.complete(false)
         clearPromptForServer(serverId)
-        clients[serverId]?.setHostKeyVerificationCallback(null)
-        clients[serverId]?.disconnect()
-        clients.remove(serverId)
-        buffers.remove(serverId)
-
-        _paneStates.value = _paneStates.value.toMutableMap().apply {
-            remove(serverId)
-        }
+        connectionManager.clearHostKeyCallback(serverId)
+        connectionManager.disconnect(serverId)
+        _paneStates.value = _paneStates.value.toMutableMap().apply { remove(serverId) }
     }
 
     fun disconnectAll() {
-        clients.keys.toList().forEach { disconnectServer(it) }
+        servers.value.forEach { disconnectServer(it.id) }
     }
 
     fun acceptHostKey() {
         val prompt = _hostKeyPrompt.value ?: return
         viewModelScope.launch {
-            clients[prompt.serverId]?.trustHostKey(prompt.result)
-            hostKeyDeferred.remove(prompt.serverId)?.complete(true)
+            connectionManager.trustHostKey(prompt.serverId, prompt.result)
+            // Session is already connected (tentative accept); pull the real state.
+            // Fall back to Connected since we know the connection succeeded.
+            updatePaneState(prompt.serverId) {
+                it.copy(connectionState = connectionManager.getState(prompt.serverId)?.value
+                    ?: SSHConnectionState.Connected)
+            }
             advancePrompt()
         }
     }
 
     fun rejectHostKey() {
         val prompt = _hostKeyPrompt.value ?: return
-        hostKeyDeferred.remove(prompt.serverId)?.complete(false)
-        advancePrompt()
+        viewModelScope.launch {
+            connectionManager.disconnect(prompt.serverId)
+            updatePaneState(prompt.serverId) {
+                it.copy(connectionState = SSHConnectionState.Disconnected)
+            }
+            advancePrompt()
+        }
     }
 
     private fun updatePaneState(serverId: String, update: (TerminalPaneState) -> TerminalPaneState) {
@@ -196,10 +189,9 @@ class MultiTerminalViewModel @Inject constructor(
     }
 
     fun initializePanes(servers: List<Server>) {
-        val states = servers.associate { server ->
+        _paneStates.value = servers.associate { server ->
             server.id to TerminalPaneState(server = server)
         }
-        _paneStates.value = states
     }
 
     private fun enqueuePrompt(prompt: HostKeyPrompt) {
@@ -215,22 +207,16 @@ class MultiTerminalViewModel @Inject constructor(
     }
 
     private fun clearPromptForServer(serverId: String) {
-        val current = _hostKeyPrompt.value
-        if (current?.serverId == serverId) {
-            advancePrompt()
-        }
-        if (pendingPrompts.isNotEmpty()) {
-            val iterator = pendingPrompts.iterator()
-            while (iterator.hasNext()) {
-                if (iterator.next().serverId == serverId) {
-                    iterator.remove()
-                }
-            }
-        }
+        if (_hostKeyPrompt.value?.serverId == serverId) advancePrompt()
+        pendingPrompts.removeIf { it.serverId == serverId }
     }
 
     override fun onCleared() {
         super.onCleared()
-        disconnectAll()
+        observedPanes.clear()
+        // Only clear callbacks — connections stay alive in ConnectionManager
+        servers.value.forEach { server ->
+            connectionManager.clearHostKeyCallback(server.id)
+        }
     }
 }

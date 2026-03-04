@@ -43,20 +43,17 @@ Termex is an SSH terminal client for Android using Jetpack Compose for the UI. T
 ./gradlew lintDebug
 ```
 
-### Install & Run
+### Install
 ```bash
 # Build and install debug APK to emulator/device
 ./gradlew installDebug
-
-# Build, install, and run
-./gradlew runDebug
 ```
 
 ## Project Architecture
 
 ### High-Level Structure
 - **UI Layer** (`app/src/main/java/com/termex/app/ui/`): Jetpack Compose screens, ViewModels, navigation
-- **Domain Layer** (`app/src/main/java/com/termex/app/domain/`): Use cases and business logic
+- **Domain Layer** (`app/src/main/java/com/termex/app/domain/`): Repository interfaces and domain model classes (no use cases — business logic lives in ViewModels)
 - **Data Layer** (`app/src/main/java/com/termex/app/data/`): Repositories, DAOs, local/remote data sources
 - **Core Layer** (`app/src/main/java/com/termex/app/core/`): SSH client, security, ANSI parsing, utilities
 - **DI Layer** (`app/src/main/java/com/termex/app/di/`): Hilt dependency injection modules
@@ -85,8 +82,8 @@ Termex is an SSH terminal client for Android using Jetpack Compose for the UI. T
 ### Hilt Dependency Injection
 - Use `@AndroidEntryPoint` on Activities/Fragments
 - `@Inject` fields in Activities/ViewModels
-- Modules define providers with `@Module`, `@InstallIn(SingletonComponent::class)`, `@Provides`, `@Singleton`
-- Example: `AppModule.kt` and `RepositoryModule.kt`
+- `AppModule.kt` uses `@Provides` + `@Singleton` for constructing objects; `RepositoryModule.kt` uses `@Binds` to map interfaces to implementations
+- Both modules use `@InstallIn(SingletonComponent::class)`
 
 ### Testing
 - Unit tests in `app/src/test/java` use JUnit 4
@@ -95,7 +92,8 @@ Termex is an SSH terminal client for Android using Jetpack Compose for the UI. T
 - Example tests: `AnsiParserTest`, `SshIntegrationTest`, `SessionRepositoryTest`
 
 ### Navigation & Routing
-- Routes defined in `Routes.kt`
+- Routes defined as `sealed class Route` with `data object` entries in `Routes.kt`
+- Parameterized routes (e.g., `Terminal`, `MultiTerminal`) have a `createRoute(id)` factory method — always use the factory, not the raw `route` string
 - Compose navigation using NavHost and NavController
 - Main tabs structure in `MainTabs.kt`, onboarding flow in `OnboardingFlow.kt`
 
@@ -103,7 +101,7 @@ Termex is an SSH terminal client for Android using Jetpack Compose for the UI. T
 - Uses Kotlin DSL (`build.gradle.kts`)
 - KSP (Kotlin Symbol Processing) for annotation processing (Room, Hilt)
 - Parallel builds enabled for speed
-- Three build types: `debug`, `dev` (with paywall bypass), `release` (with ProGuard)
+- Three build types: `debug`, `dev` (paywall bypass, `applicationId` suffix `.dev`), `release` (with ProGuard)
 - Signing configuration supports both `keystore.properties` file and environment variables
 
 ### Security & Secrets
@@ -121,11 +119,14 @@ Termex is an SSH terminal client for Android using Jetpack Compose for the UI. T
 
 ### SSH & Terminal Features
 - SSH client built on Apache MINA SSHD
-- ANSI escape sequence parsing and rendering
+- **BouncyCastle initialization**: `SSHClient` must call `SSHClient.initializeSecurityProvider()` before any SSH operations. This replaces Android's stripped-down BC provider with the full one to support ed25519/X25519. Called once at app start.
+- ANSI escape sequence parsing: `AnsiParser` returns `ParsedSegment.Text` (styled text) and `ParsedSegment.CsiCommand` (cursor/erase controls); renderers handle both types
+- `TerminalBuffer` holds the on-screen cell grid; `TerminalViewModel.onCleared()` snapshots the last 500 lines and persists them via `SessionRepository` using `NonCancellable` scope
 - Port forwarding support
 - Known hosts management
-- Multiple terminal sessions supported
-- Snippets (saved commands) with WorkplaceVM organization
+- Multiple terminal sessions supported via `MultiTerminalViewModel`
+- Snippets (saved commands) with Workplace grouping
+- `BuildConfig.BYPASS_PAYWALL` is `true` in the `dev` build type for testing premium features without billing
 
 ## Common Development Tasks
 

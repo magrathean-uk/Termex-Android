@@ -20,10 +20,20 @@ sealed class Route(val route: String) {
     data object Terminal : Route("terminal/{serverId}") {
         fun createRoute(serverId: String) = "terminal/$serverId"
     }
-    data object ServerSettings : Route("server_settings?serverId={serverId}") {
-        fun createRoute(serverId: String? = null) =
-            if (serverId != null) "server_settings?serverId=$serverId"
-            else "server_settings"
+    data object ServerSettings : Route("server_settings?serverId={serverId}&prefillHost={prefillHost}&prefillPort={prefillPort}&prefillUser={prefillUser}") {
+        fun createRoute(
+            serverId: String? = null,
+            prefillHost: String = "",
+            prefillPort: Int = 0,
+            prefillUser: String = ""
+        ) = buildString {
+            append("server_settings")
+            if (serverId != null) append("?serverId=$serverId")
+            else append("?serverId=")
+            append("&prefillHost=${android.net.Uri.encode(prefillHost)}")
+            append("&prefillPort=$prefillPort")
+            append("&prefillUser=${android.net.Uri.encode(prefillUser)}")
+        }
     }
     data object PortForwarding : Route("port_forwarding/{serverId}") {
         fun createRoute(serverId: String) = "port_forwarding/$serverId"

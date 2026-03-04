@@ -114,6 +114,7 @@
     <string name="port_forwarding_local_port">Local Port</string>
     <string name="port_forwarding_remote_host">Remote Host</string>
     <string name="port_forwarding_remote_port">Remote Port</string>
+    <string name="port_forwarding_bind_address">Bind Address</string>
 
     <!-- Server Settings -->
     <string name="server_settings_title_new">New Server</string>
@@ -140,6 +141,8 @@
     <string name="server_settings_label_jump_host">Jump Host</string>
     <string name="server_settings_label_forward_agent">Forward Agent</string>
     <string name="server_settings_forward_agent_description">Forward SSH agent to remote host</string>
+    <string name="server_settings_label_identities_only">Identities Only</string>
+    <string name="server_settings_identities_only_description">Only use explicitly configured keys; ignore SSH agent offers</string>
 
     <!-- Certificates -->
     <string name="certificates_title">Certificates</string>
@@ -184,6 +187,8 @@
     <string name="paywall_subscribe_now">Subscribe Now</string>
     <string name="paywall_free_trial_format">%1$s free trial</string>
     <string name="paywall_price_after_trial_format">%1$s after trial</string>
+    <string name="paywall_try_demo_mode">Try Demo Mode</string>
+    <string name="demo_mode_banner">Demo mode – live connections are disabled</string>
 
     <!-- Onboarding -->
     <string name="onboarding_welcome_title">Welcome to Termex</string>
@@ -199,6 +204,7 @@
     <string name="onboarding_next">Next</string>
     <string name="onboarding_demo_mode_enabled">Demo mode enabled</string>
     <string name="onboarding_demo_mode_taps_remaining">%1$d taps to enable demo mode</string>
+    <string name="onboarding_try_demo_mode">Try Demo Mode</string>
 
     <!-- SSH Dialogs -->
     <string name="ssh_dialog_password_required">Password Required</string>

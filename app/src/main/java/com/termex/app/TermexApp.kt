@@ -18,6 +18,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import com.termex.app.BuildConfig
 import com.termex.app.core.billing.SubscriptionState
 import com.termex.app.ui.navigation.Route
@@ -48,7 +53,8 @@ fun TermexApp(
     val demoModeActive = demoModeEnabled || demoModeActivated
     val paywallRequired = !paywallBypassed &&
         !demoModeActive &&
-        subscriptionState !is SubscriptionState.SUBSCRIBED
+        subscriptionState !is SubscriptionState.SUBSCRIBED &&
+        subscriptionState !is SubscriptionState.LOADING
 
     LaunchedEffect(demoModeEnabled) {
         if (demoModeEnabled) {
@@ -56,13 +62,20 @@ fun TermexApp(
         }
     }
 
+    // Show a loading screen while billing state is being determined (prevents paywall flash)
+    if (hasCompletedOnboarding && subscriptionState is SubscriptionState.LOADING && !paywallBypassed && !demoModeActive) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
     // Determine start destination
     // Demo mode users bypass the paywall
-    // Show paywall unless actively subscribed (LOADING, ERROR, NOT_SUBSCRIBED all show paywall)
     val startDestination = when {
         !hasCompletedOnboarding -> Route.Onboarding.route
         !paywallRequired -> Route.Main.route
-        else -> Route.Paywall.route  // NOT_SUBSCRIBED, LOADING, ERROR all show paywall
+        else -> Route.Paywall.route
     }
     
     NavHost(
@@ -117,6 +130,13 @@ fun TermexApp(
                 },
                 onRestore = {
                     viewModel.refreshSubscription()
+                },
+                onDemoMode = {
+                    demoModeActivated = true
+                    viewModel.enableDemoMode()
+                    navController.navigate(Route.Main.route) {
+                        popUpTo(Route.Paywall.route) { inclusive = true }
+                    }
                 }
             )
         }
@@ -125,7 +145,11 @@ fun TermexApp(
             PaywallGate(
                 paywallRequired = paywallRequired,
                 onSubscribed = { viewModel.refreshSubscription() },
-                onRestore = { viewModel.refreshSubscription() }
+                onRestore = { viewModel.refreshSubscription() },
+                onDemoMode = {
+                    demoModeActivated = true
+                    viewModel.enableDemoMode()
+                }
             ) {
                 MainTabs(rootNavController = navController)
             }
@@ -143,20 +167,31 @@ fun TermexApp(
             ) {
                 TerminalScreen(
                     serverId = serverId,
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToPortForwarding = { id ->
+                        navController.navigate(Route.PortForwarding.createRoute(id))
+                    }
                 )
             }
         }
 
         composable(
             route = Route.ServerSettings.route,
-            arguments = listOf(navArgument("serverId") {
-                type = NavType.StringType
-                nullable = true
-                defaultValue = null
-            })
+            arguments = listOf(
+                navArgument("serverId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("prefillHost") { type = NavType.StringType; defaultValue = "" },
+                navArgument("prefillPort") { type = NavType.IntType; defaultValue = 0 },
+                navArgument("prefillUser") { type = NavType.StringType; defaultValue = "" }
+            )
         ) { backStackEntry ->
             val serverId = backStackEntry.arguments?.getString("serverId")
+            val prefillHost = backStackEntry.arguments?.getString("prefillHost") ?: ""
+            val prefillPort = backStackEntry.arguments?.getInt("prefillPort") ?: 0
+            val prefillUser = backStackEntry.arguments?.getString("prefillUser") ?: ""
             PaywallGate(
                 paywallRequired = paywallRequired,
                 onSubscribed = { viewModel.refreshSubscription() },
@@ -164,6 +199,9 @@ fun TermexApp(
             ) {
                 ServerSettingsScreen(
                     serverId = serverId,
+                    prefillHost = prefillHost,
+                    prefillPort = prefillPort,
+                    prefillUser = prefillUser,
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
@@ -251,8 +289,14 @@ fun TermexApp(
                 SSHConfigBrowserScreen(
                     onNavigateBack = { navController.popBackStack() },
                     onApplyHost = { host ->
-                        // Navigate to new server settings (without unsupported query params)
-                        navController.navigate(Route.ServerSettings.createRoute(null))
+                        navController.navigate(
+                            Route.ServerSettings.createRoute(
+                                serverId = null,
+                                prefillHost = host.hostname ?: host.host,
+                                prefillPort = host.port ?: 22,
+                                prefillUser = host.user ?: ""
+                            )
+                        )
                     }
                 )
             }
@@ -265,12 +309,14 @@ private fun PaywallGate(
     paywallRequired: Boolean,
     onSubscribed: () -> Unit,
     onRestore: () -> Unit,
+    onDemoMode: (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     if (paywallRequired) {
         PaywallScreen(
             onSubscribed = onSubscribed,
-            onRestore = onRestore
+            onRestore = onRestore,
+            onDemoMode = onDemoMode
         )
     } else {
         content()
