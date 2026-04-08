@@ -1,24 +1,17 @@
 # AI.md
 
-## Overview
-Termex-Android is an Android SSH client with Compose UI, Hilt DI, Room persistence, terminal emulation, host-key verification, port forwarding, and subscription gating.
+Use this repository's docs as the source of truth.
 
-## Layout
-- `app/src/main/java/com/termex/app/core`: SSH, security, billing, demo helpers.
-- `app/src/main/java/com/termex/app/data`: Room entities/DAOs, repositories, encrypted storage, preferences.
-- `app/src/main/java/com/termex/app/ui`: screens, components, navigation, view models, theme.
-- `app/src/test`: JVM tests for SSH/parser/repository logic.
-- `plan.md` and `REPO_IMPROVEMENT_PLAN.md`: backlog and remediation notes.
+## Read first
 
-## Commands
-```bash
-./gradlew assembleDebug
-./gradlew testDebugUnitTest
-./gradlew connectedDebugAndroidTest
-```
-The project also has a `dev` variant in generated output; keep command choices aligned with the existing Gradle setup rather than inventing new flavours.
+- [README](./README.md)
+- [Security](./SECURITY.md)
+- [Google Play subscription setup](./GOOGLE_PLAY_SUBSCRIPTION_SETUP.md)
+- [Repo improvement plan](./REPO_IMPROVEMENT_PLAN.md)
 
 ## Guardrails
-- Do not edit generated files under `app/build/`.
-- Preserve host-key verification, secure password storage, and demo-mode behaviour.
-- Keep terminal/session state logic in the core/data layers, not in composables.
+
+- Keep secrets out of the repo except for templates and examples.
+- Preserve SSH trust, key handling, and biometric-lock behavior.
+- Use `~/dev/creds/` for GitHub auth and App Store Connect references.
+- Avoid changing generated Gradle output unless the source requires it.

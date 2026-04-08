@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.InputStream
@@ -23,10 +24,13 @@ class RealSSHTest {
     private lateinit var sshClient: SSHClient
 
     companion object {
-        val TEST_HOST = System.getenv("SSH_TEST_HOST") ?: "172.17.17.185"
+        private val TEST_HOST_ENV = System.getenv("SSH_TEST_HOST")
+        private val TEST_USER_ENV = System.getenv("SSH_TEST_USER")
+        private val TEST_PASS_ENV = System.getenv("SSH_TEST_PASS")
+        val TEST_HOST = TEST_HOST_ENV ?: "172.17.17.185"
         val TEST_PORT = System.getenv("SSH_TEST_PORT")?.toIntOrNull() ?: 22
-        val TEST_USER = System.getenv("SSH_TEST_USER") ?: "testuser"
-        val TEST_PASS = System.getenv("SSH_TEST_PASS") ?: ""
+        val TEST_USER = TEST_USER_ENV ?: "testuser"
+        val TEST_PASS = TEST_PASS_ENV ?: ""
     }
 
     @Before
@@ -37,15 +41,17 @@ class RealSSHTest {
         
         // Auto-trust host keys for testing
         sshClient.setHostKeyVerificationCallback(object : HostKeyVerificationCallback {
-            override suspend fun onVerificationRequired(result: HostKeyVerificationResult): Boolean {
-                verifier.trustHostKey(result)
-                return true
+            override fun onVerificationRequiredAsync(result: HostKeyVerificationResult) {
+                runBlocking {
+                    verifier.trustHostKey(result)
+                }
             }
         })
     }
 
     @Test
     fun test_basicPasswordConnection() = runBlocking {
+        assumePasswordTargetConfigured()
         println("=== Testing SSH connection to $TEST_HOST ===")
         
         val config = SSHConnectionConfig(
@@ -69,6 +75,7 @@ class RealSSHTest {
 
     @Test
     fun test_commandExecution() = runBlocking {
+        assumePasswordTargetConfigured()
         println("=== Testing command execution ===")
         
         val config = SSHConnectionConfig(
@@ -132,6 +139,7 @@ class RealSSHTest {
 
     @Test
     fun test_wrongPassword() = runBlocking {
+        assumePasswordTargetConfigured()
         println("=== Testing wrong password ===")
         
         // Skip this test - local machine might have SSH keys set up for this host
@@ -139,6 +147,12 @@ class RealSSHTest {
         // auth failures correctly when they do occur.
         println("⊘ Test skipped - SSH keys may bypass password auth from this machine")
         println("  Auth failure handling is tested in the app UI layer")
+    }
+
+    private fun assumePasswordTargetConfigured() {
+        assumeTrue(!TEST_HOST_ENV.isNullOrBlank())
+        assumeTrue(!TEST_USER_ENV.isNullOrBlank())
+        assumeTrue(!TEST_PASS_ENV.isNullOrBlank())
     }
 
     private fun readAvailable(input: InputStream): String {

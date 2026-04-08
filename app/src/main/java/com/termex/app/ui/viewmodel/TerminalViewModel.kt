@@ -6,9 +6,13 @@ import com.termex.app.core.demo.DemoTerminal
 import com.termex.app.core.ssh.ConnectionManager
 import com.termex.app.core.ssh.HostKeyVerificationCallback
 import com.termex.app.core.ssh.HostKeyVerificationResult
+import com.termex.app.core.ssh.SSHConnectionConfig
 import com.termex.app.core.ssh.SSHConnectionState
 import com.termex.app.core.ssh.SshConfigBuilder
 import com.termex.app.core.ssh.TerminalBuffer
+import com.termex.app.data.diagnostics.DiagnosticEvent
+import com.termex.app.data.diagnostics.DiagnosticSeverity
+import com.termex.app.data.diagnostics.DiagnosticsRepository
 import com.termex.app.data.prefs.TerminalSettings
 import com.termex.app.data.prefs.UserPreferencesRepository
 import com.termex.app.domain.Server
@@ -24,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -36,7 +41,8 @@ class TerminalViewModel @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val sshConfigBuilder: SshConfigBuilder,
     private val sessionRepository: com.termex.app.data.repository.SessionRepository,
-    private val snippetRepository: SnippetRepository
+    private val snippetRepository: SnippetRepository,
+    private val diagnosticsRepository: DiagnosticsRepository
 ) : ViewModel() {
 
     // Session key — set when connect() is called, used to address ConnectionManager
@@ -78,6 +84,14 @@ class TerminalViewModel @Inject constructor(
     val terminalSettings: StateFlow<TerminalSettings> = userPreferencesRepository.terminalSettingsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TerminalSettings())
 
+    val recentDiagnosticEvents: StateFlow<List<DiagnosticEvent>> = combine(
+        diagnosticsRepository.events,
+        _currentServer
+    ) { events, server ->
+        val serverId = server?.id ?: return@combine emptyList()
+        events.filter { it.serverId == serverId }.take(20)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     private val _showSnippetPicker = MutableStateFlow(false)
     val showSnippetPicker: StateFlow<Boolean> = _showSnippetPicker.asStateFlow()
 
@@ -102,17 +116,26 @@ class TerminalViewModel @Inject constructor(
             _needsPassword.value = false
             _hostKeyVerification.value = null
 
-            if (serverId == Server.DEMO_SERVER_ID) { connectToDemo(); return@launch }
+            if (serverId == Server.DEMO_SERVER_ID) {
+                connectToDemo()
+                return@launch
+            }
             if (globalDemoModeEnabled) {
                 _connectionState.value = SSHConnectionState.Error("Demo mode: Real connections disabled")
                 return@launch
             }
 
             val server = serverRepository.getServer(serverId)
-            if (server == null) { _connectionState.value = SSHConnectionState.Error("Server not found"); return@launch }
+            if (server == null) {
+                _connectionState.value = SSHConnectionState.Error("Server not found")
+                return@launch
+            }
             _currentServer.value = server
 
-            if (server.isDemo) { connectToDemo(); return@launch }
+            if (server.isDemo) {
+                connectToDemo()
+                return@launch
+            }
 
             // Re-attach to an already-live connection — no need to reconnect
             if (connectionManager.isConnected(serverId)) {
@@ -123,7 +146,10 @@ class TerminalViewModel @Inject constructor(
             }
 
             val config = sshConfigBuilder.buildConfig(server, password)
-            if (config == null) { _connectionState.value = SSHConnectionState.Error("Invalid connection config"); return@launch }
+            if (config == null) {
+                _connectionState.value = SSHConnectionState.Error("Invalid connection config")
+                return@launch
+            }
             if (config.password == null && config.privateKey == null) {
                 pendingServerId = server.id
                 _needsPassword.value = true
@@ -145,6 +171,12 @@ class TerminalViewModel @Inject constructor(
             demoBuffer.write(demoTerminal?.getWelcomeMessage() ?: "")
             _terminalLines.value = demoBuffer.contentFlow.value
             _connectionState.value = SSHConnectionState.Connected
+            diagnosticsRepository.record(
+                category = "connection",
+                title = "Demo session started",
+                detail = "Demo mode terminal",
+                serverId = Server.DEMO_SERVER_ID
+            )
             launch {
                 demoTerminal?.output?.collect { output ->
                     if (output.isNotEmpty()) {
@@ -169,13 +201,24 @@ class TerminalViewModel @Inject constructor(
         }
     }
 
-    private suspend fun performConnect(serverId: String, config: com.termex.app.core.ssh.SSHConnectionConfig) {
+    private suspend fun performConnect(serverId: String, config: SSHConnectionConfig) {
         sessionKey = serverId
 
         // Fire-and-forget callback — never blocks the MINA NIO2 thread
         val hostKeyCallback = object : HostKeyVerificationCallback {
             override fun onVerificationRequiredAsync(result: HostKeyVerificationResult) {
                 viewModelScope.launch {
+                    diagnosticsRepository.record(
+                        category = "host_key",
+                        title = when (result) {
+                            is HostKeyVerificationResult.Unknown -> "Unknown host key"
+                            is HostKeyVerificationResult.Changed -> "Host key changed"
+                            HostKeyVerificationResult.Trusted -> "Trusted host key"
+                        },
+                        detail = hostKeySummary(result),
+                        serverId = serverId,
+                        severity = if (result is HostKeyVerificationResult.Changed) DiagnosticSeverity.WARNING else DiagnosticSeverity.INFO
+                    )
                     _hostKeyVerification.value = result
                     _connectionState.value = SSHConnectionState.VerifyingHostKey(result)
                 }
@@ -222,6 +265,13 @@ class TerminalViewModel @Inject constructor(
         viewModelScope.launch {
             val verification = _hostKeyVerification.value ?: return@launch
             val key = sessionKey ?: return@launch
+            diagnosticsRepository.record(
+                category = "host_key",
+                title = "Host key accepted",
+                detail = hostKeySummary(verification),
+                serverId = key,
+                severity = if (verification is HostKeyVerificationResult.Changed) DiagnosticSeverity.WARNING else DiagnosticSeverity.INFO
+            )
             // Save key to DB, then clear the dialog and update state
             connectionManager.trustHostKey(key, verification)
             _hostKeyVerification.value = null
@@ -235,10 +285,20 @@ class TerminalViewModel @Inject constructor(
 
     fun rejectHostKey() {
         val key = sessionKey
+        val verification = _hostKeyVerification.value
         _hostKeyVerification.value = null
         _connectionState.value = SSHConnectionState.Disconnected
         if (key != null) {
-            viewModelScope.launch { connectionManager.disconnect(key) }
+            viewModelScope.launch {
+                diagnosticsRepository.record(
+                    category = "host_key",
+                    title = "Host key rejected",
+                    detail = verification?.let(::hostKeySummary),
+                    serverId = key,
+                    severity = DiagnosticSeverity.WARNING
+                )
+                connectionManager.disconnect(key)
+            }
         }
     }
 
@@ -294,7 +354,9 @@ class TerminalViewModel @Inject constructor(
                 connectionManager.getBuffer(key)?.contentFlow?.value
                     ?.takeLast(500)
                     ?.joinToString("\n") { line -> line.cells.joinToString("") { it.char.toString() } }
-            } catch (_: Exception) { null }
+            } catch (_: Exception) {
+                null
+            }
             if (bufferSnapshot != null) {
                 @Suppress("OPT_IN_USAGE")
                 GlobalScope.launch(NonCancellable + Dispatchers.IO) {
@@ -310,10 +372,17 @@ class TerminalViewModel @Inject constructor(
                             )
                             sessionRepository.saveSession(sessionState)
                         }
-                    } catch (_: TimeoutCancellationException) {}
-                    catch (_: Exception) {}
+                    } catch (_: TimeoutCancellationException) {
+                    } catch (_: Exception) {
+                    }
                 }
             }
         }
+    }
+
+    private fun hostKeySummary(result: HostKeyVerificationResult): String = when (result) {
+        is HostKeyVerificationResult.Unknown -> "${result.hostname}:${result.port} ${result.fingerprint}"
+        is HostKeyVerificationResult.Changed -> "${result.hostname}:${result.port} ${result.oldFingerprint} → ${result.newFingerprint}"
+        HostKeyVerificationResult.Trusted -> "Trusted host"
     }
 }

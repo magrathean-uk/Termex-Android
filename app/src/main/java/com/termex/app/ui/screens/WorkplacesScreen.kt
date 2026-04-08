@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PlayArrow
@@ -102,6 +103,7 @@ fun WorkplacesScreen(
                         isExpanded = expandedWorkplace == workplace.id,
                         onToggleExpand = { viewModel.toggleExpanded(workplace.id) },
                         onOpenAll = { onOpenMultiTerminal(workplace.id) },
+                        onEdit = { viewModel.showEditDialog(workplace) },
                         onDelete = { viewModel.deleteWorkplace(workplace) },
                         onAddServer = { viewModel.showAddServerToWorkplace(workplace.id) },
                         onRemoveServer = { viewModel.removeServerFromWorkplace(it) },
@@ -186,6 +188,7 @@ private fun WorkplaceCard(
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
     onOpenAll: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
     onAddServer: () -> Unit,
     onRemoveServer: (Server) -> Unit,
@@ -217,6 +220,9 @@ private fun WorkplaceCard(
                             IconButton(onClick = onOpenAll) {
                                 Icon(Icons.Default.PlayArrow, contentDescription = "Open All")
                             }
+                        }
+                        IconButton(onClick = onEdit) {
+                            Icon(Icons.Default.Edit, contentDescription = "Edit")
                         }
                         IconButton(onClick = onDelete) {
                             Icon(Icons.Default.Delete, contentDescription = "Delete")

@@ -4,12 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.termex.app.core.billing.SubscriptionManager
 import com.termex.app.core.billing.SubscriptionState
+import com.termex.app.data.diagnostics.DiagnosticsRepository
 import com.termex.app.data.prefs.KeepAliveInterval
 import com.termex.app.data.prefs.TerminalSettings
 import com.termex.app.data.prefs.ThemeMode
 import com.termex.app.data.prefs.UserPreferencesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,7 +24,8 @@ class SettingsViewModel @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val subscriptionManager: SubscriptionManager,
     val biometricAuthManager: com.termex.app.core.security.BiometricAuthManager,
-    private val sessionRepository: com.termex.app.data.repository.SessionRepository
+    private val sessionRepository: com.termex.app.data.repository.SessionRepository,
+    private val diagnosticsRepository: DiagnosticsRepository
 ) : ViewModel() {
 
     val themeMode: StateFlow<ThemeMode> = userPreferencesRepository.themeFlow
@@ -41,6 +44,13 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
     val subscriptionState: StateFlow<SubscriptionState> = subscriptionManager.subscriptionState
+
+    val diagnosticsSummary: StateFlow<String> = combine(
+        diagnosticsRepository.events,
+        sessionRepository.getAllSessions()
+    ) { events, sessions ->
+        "${events.size} events · ${sessions.size} saved sessions"
+    }.stateIn(viewModelScope, SharingStarted.Lazily, "0 events · 0 saved sessions")
 
     // For demo mode activation (5 taps on version)
     private val _versionTapCount = MutableStateFlow(0)

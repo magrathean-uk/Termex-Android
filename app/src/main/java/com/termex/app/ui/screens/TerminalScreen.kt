@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -65,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.termex.app.R
 import com.termex.app.core.ssh.SSHConnectionState
+import com.termex.app.ui.components.ConnectionReportSheet
 import com.termex.app.ui.components.HostKeyVerificationDialog
 import com.termex.app.ui.components.PasswordDialog
 import com.termex.app.ui.components.TerminalKeyboard
@@ -89,6 +91,7 @@ fun TerminalScreen(
     val showSnippetPicker by viewModel.showSnippetPicker.collectAsState()
     val snippets by viewModel.snippets.collectAsState()
     val terminalSettings by viewModel.terminalSettings.collectAsState()
+    val recentDiagnosticEvents by viewModel.recentDiagnosticEvents.collectAsState()
     val colorScheme = TerminalColorScheme.fromName(terminalSettings.colorScheme)
 
     var ctrlActive by remember { mutableStateOf(false) }
@@ -97,6 +100,7 @@ fun TerminalScreen(
     val focusManager = LocalFocusManager.current
     val focusRequester = remember { FocusRequester() }
     val snippetSheetState = rememberModalBottomSheetState()
+    var showConnectionReport by remember { mutableStateOf(false) }
 
     LaunchedEffect(serverId) {
         viewModel.connect(serverId)
@@ -135,6 +139,15 @@ fun TerminalScreen(
                 viewModel.disconnect()
                 onNavigateBack()
             }
+        )
+    }
+
+    if (showConnectionReport) {
+        ConnectionReportSheet(
+            server = currentServer,
+            connectionState = connectionState,
+            events = recentDiagnosticEvents,
+            onDismiss = { showConnectionReport = false }
         )
     }
 
@@ -233,6 +246,13 @@ fun TerminalScreen(
                 },
                 actions = {
                     if (connectionState is SSHConnectionState.Connected) {
+                        IconButton(onClick = { showConnectionReport = true }) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = stringResource(R.string.connection_report_title),
+                                tint = Color(0xFF98989D)
+                            )
+                        }
                         // Snippets button
                         IconButton(onClick = { viewModel.showSnippetPicker() }) {
                             Icon(

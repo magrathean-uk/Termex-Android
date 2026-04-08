@@ -3,6 +3,8 @@ package com.termex.app.core.ssh
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
+import com.termex.app.data.diagnostics.DiagnosticSeverity
+import com.termex.app.data.diagnostics.DiagnosticsRepository
 import com.termex.app.service.TermexConnectionService
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -17,7 +19,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Provider
@@ -32,13 +33,15 @@ import javax.inject.Singleton
 @Singleton
 class ConnectionManager @Inject constructor(
     private val sshClientProvider: Provider<SSHClient>,
+    private val diagnosticsRepository: DiagnosticsRepository,
     @ApplicationContext private val context: Context
 ) {
     data class Session(
         val client: SSHClient,
         val buffer: TerminalBuffer,
         val state: MutableStateFlow<SSHConnectionState>,
-        var readJob: Job? = null
+        var readJob: Job? = null,
+        var disconnectRequested: Boolean = false
     )
 
     private val sessions = ConcurrentHashMap<String, Session>()
@@ -48,6 +51,8 @@ class ConnectionManager @Inject constructor(
 
     // Application-level scope — never cancelled while app process is alive
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val _activeSessionKeys = MutableStateFlow<Set<String>>(emptySet())
+    val activeSessionKeys: StateFlow<Set<String>> = _activeSessionKeys.asStateFlow()
 
     // --- Public API ---
 
@@ -65,23 +70,39 @@ class ConnectionManager @Inject constructor(
         sessions[key]?.client?.setHostKeyVerificationCallback(null)
     }
 
-    suspend fun connect(key: String, config: SSHConnectionConfig, hostKeyCallback: HostKeyVerificationCallback? = null): Result<Unit> {
+    suspend fun connect(
+        key: String,
+        config: SSHConnectionConfig,
+        hostKeyCallback: HostKeyVerificationCallback? = null
+    ): Result<Unit> {
         val mutex = connectMutexes.computeIfAbsent(key) { Mutex() }
         return mutex.withLock {
             // If already have a live (connecting or connected) session, re-use it
             val existing = sessions[key]
-            if (existing != null && existing.state.value !is SSHConnectionState.Error &&
-                existing.state.value !is SSHConnectionState.Disconnected) {
+            if (
+                existing != null &&
+                existing.state.value !is SSHConnectionState.Error &&
+                existing.state.value !is SSHConnectionState.Disconnected
+            ) {
                 return@withLock Result.success(Unit)
             }
             // Remove any stale errored/disconnected session
             sessions.remove(key)
+            publishActiveSessionKeys()
+
+            diagnosticsRepository.record(
+                category = "connection",
+                title = "Connection started",
+                detail = "${config.username}@${config.hostname}:${config.port}",
+                serverId = key
+            )
 
             val client = sshClientProvider.get()
             val stateFlow = MutableStateFlow<SSHConnectionState>(SSHConnectionState.Connecting)
             val buffer = TerminalBuffer()
             val session = Session(client, buffer, stateFlow)
             sessions[key] = session
+            publishActiveSessionKeys()
 
             // Register the host key callback now that the session/client exists
             if (hostKeyCallback != null) {
@@ -95,20 +116,57 @@ class ConnectionManager @Inject constructor(
                 var wasEverConnected = false
                 client.connectionState.collect { clientState ->
                     stateFlow.value = clientState
-                    if (clientState is SSHConnectionState.Connected) wasEverConnected = true
-                    if (clientState is SSHConnectionState.Error ||
-                        (clientState is SSHConnectionState.Disconnected && wasEverConnected)
-                    ) {
-                        cleanupSession(key)
+                    when (clientState) {
+                        is SSHConnectionState.Connected -> {
+                            wasEverConnected = true
+                            diagnosticsRepository.record(
+                                category = "connection",
+                                title = "Connection established",
+                                detail = "${config.username}@${config.hostname}:${config.port}",
+                                serverId = key
+                            )
+                        }
+
+                        is SSHConnectionState.Error -> {
+                            diagnosticsRepository.record(
+                                category = "connection",
+                                title = "Connection error",
+                                detail = clientState.message,
+                                serverId = key,
+                                severity = DiagnosticSeverity.ERROR
+                            )
+                            cleanupSession(key)
+                        }
+
+                        is SSHConnectionState.Disconnected -> {
+                            if (wasEverConnected) {
+                                diagnosticsRepository.record(
+                                    category = "connection",
+                                    title = if (session.disconnectRequested) "Disconnected by user" else "Connection closed",
+                                    detail = "${config.username}@${config.hostname}:${config.port}",
+                                    serverId = key
+                                )
+                                cleanupSession(key)
+                            }
+                        }
+
+                        else -> Unit
                     }
                 }
             }
 
             val result = client.connect(config)
             if (result.isSuccess) {
-                startService()  // Only start service after confirmed connection
+                startService() // Only start service after confirmed connection
                 startReading(key, session)
             } else {
+                diagnosticsRepository.record(
+                    category = "connection",
+                    title = "Connection failed",
+                    detail = result.exceptionOrNull()?.message ?: "Unknown connection failure",
+                    serverId = key,
+                    severity = DiagnosticSeverity.ERROR
+                )
                 cleanupSession(key)
             }
             updateServiceNotification()
@@ -130,7 +188,10 @@ class ConnectionManager @Inject constructor(
     }
 
     fun disconnect(key: String) {
-        val session = sessions.remove(key) ?: return
+        val session = sessions[key] ?: return
+        session.disconnectRequested = true
+        sessions.remove(key)
+        publishActiveSessionKeys()
         scope.launch(NonCancellable) {
             session.readJob?.cancel()
             session.client.disconnect()
@@ -156,7 +217,10 @@ class ConnectionManager @Inject constructor(
                     val n = reader.read(buf)
                     when {
                         n > 0 -> session.buffer.write(String(buf, 0, n))
-                        n == -1 -> { session.client.disconnect(); break }
+                        n == -1 -> {
+                            session.client.disconnect()
+                            break
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -172,6 +236,7 @@ class ConnectionManager @Inject constructor(
 
     private fun cleanupSession(key: String) {
         sessions.remove(key)?.readJob?.cancel()
+        publishActiveSessionKeys()
         connectMutexes.remove(key)
         scope.launch {
             updateServiceNotification()
@@ -179,11 +244,16 @@ class ConnectionManager @Inject constructor(
         }
     }
 
+    private fun publishActiveSessionKeys() {
+        _activeSessionKeys.value = sessions.keys.toSet()
+    }
+
     private fun startService() {
         try {
             val intent = Intent(context, TermexConnectionService::class.java)
             ContextCompat.startForegroundService(context, intent)
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
     }
 
     private fun updateServiceNotification() {
@@ -192,14 +262,16 @@ class ConnectionManager @Inject constructor(
             intent.setPackage(context.packageName)
             intent.putExtra(TermexConnectionService.EXTRA_CONNECTION_COUNT, sessions.size)
             context.sendBroadcast(intent)
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
     }
 
     private fun stopServiceIfIdle() {
         if (sessions.isEmpty()) {
             try {
                 context.stopService(Intent(context, TermexConnectionService::class.java))
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
         }
     }
 }

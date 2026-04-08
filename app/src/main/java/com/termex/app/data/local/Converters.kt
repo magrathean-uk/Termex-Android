@@ -3,11 +3,27 @@ package com.termex.app.data.local
 import androidx.room.TypeConverter
 import com.termex.app.domain.PortForward
 import com.termex.app.domain.PortForwardType
-import org.json.JSONArray
-import org.json.JSONObject
 import java.util.Date
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 class Converters {
+    @Serializable
+    private data class PortForwardPayload(
+        val id: String,
+        val type: String,
+        val localPort: Int,
+        val remoteHost: String = "localhost",
+        val remotePort: Int,
+        val enabled: Boolean = true,
+        val bindAddress: String = "127.0.0.1"
+    )
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+    }
+
     @TypeConverter
     fun fromTimestamp(value: Long?): Date? {
         return value?.let { Date(it) }
@@ -20,34 +36,33 @@ class Converters {
 
     fun portForwardsToJson(portForwards: List<PortForward>): String? {
         if (portForwards.isEmpty()) return null
-        val jsonArray = JSONArray()
-        portForwards.forEach { pf ->
-            val obj = JSONObject().apply {
-                put("id", pf.id)
-                put("type", pf.type.name)
-                put("localPort", pf.localPort)
-                put("remoteHost", pf.remoteHost)
-                put("remotePort", pf.remotePort)
-                put("enabled", pf.enabled)
+        return json.encodeToString(
+            portForwards.map { pf ->
+                PortForwardPayload(
+                    id = pf.id,
+                    type = pf.type.name,
+                    localPort = pf.localPort,
+                    remoteHost = pf.remoteHost,
+                    remotePort = pf.remotePort,
+                    enabled = pf.enabled,
+                    bindAddress = pf.bindAddress
+                )
             }
-            jsonArray.put(obj)
-        }
-        return jsonArray.toString()
+        )
     }
 
     fun portForwardsFromJson(json: String?): List<PortForward> {
         if (json.isNullOrEmpty()) return emptyList()
         return try {
-            val jsonArray = JSONArray(json)
-            (0 until jsonArray.length()).map { i ->
-                val obj = jsonArray.getJSONObject(i)
+            this.json.decodeFromString<List<PortForwardPayload>>(json).map { payload ->
                 PortForward(
-                    id = obj.optString("id", java.util.UUID.randomUUID().toString()),
-                    type = PortForwardType.valueOf(obj.optString("type", "LOCAL")),
-                    localPort = obj.getInt("localPort"),
-                    remoteHost = obj.optString("remoteHost", "localhost"),
-                    remotePort = obj.getInt("remotePort"),
-                    enabled = obj.optBoolean("enabled", true)
+                    id = payload.id,
+                    type = PortForwardType.valueOf(payload.type),
+                    localPort = payload.localPort,
+                    remoteHost = payload.remoteHost,
+                    remotePort = payload.remotePort,
+                    enabled = payload.enabled,
+                    bindAddress = payload.bindAddress
                 )
             }
         } catch (e: Exception) {

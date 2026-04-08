@@ -27,6 +27,7 @@ import com.termex.app.BuildConfig
 import com.termex.app.core.billing.SubscriptionState
 import com.termex.app.ui.navigation.Route
 import com.termex.app.ui.screens.CertificatesScreen
+import com.termex.app.ui.screens.DiagnosticsScreen
 import com.termex.app.ui.screens.KnownHostsScreen
 import com.termex.app.ui.screens.MainTabs
 import com.termex.app.ui.screens.MultiTerminalScreen
@@ -275,6 +276,19 @@ fun TermexApp(
                 onRestore = { viewModel.refreshSubscription() }
             ) {
                 CertificatesScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+        }
+
+
+        composable(Route.Diagnostics.route) {
+            PaywallGate(
+                paywallRequired = paywallRequired,
+                onSubscribed = { viewModel.refreshSubscription() },
+                onRestore = { viewModel.refreshSubscription() }
+            ) {
+                DiagnosticsScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }

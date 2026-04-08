@@ -77,11 +77,12 @@ class PortForwardingViewModel @Inject constructor(
             loadServer()
         }
         sshClient.setHostKeyVerificationCallback(object : HostKeyVerificationCallback {
-            override suspend fun onVerificationRequired(result: HostKeyVerificationResult): Boolean {
+            override fun onVerificationRequiredAsync(result: HostKeyVerificationResult) {
                 _hostKeyVerification.value = result
                 _connectionState.value = SSHConnectionState.VerifyingHostKey(result)
-                hostKeyVerificationDeferred = CompletableDeferred()
-                return hostKeyVerificationDeferred!!.await()
+                if (hostKeyVerificationDeferred?.isActive != true) {
+                    hostKeyVerificationDeferred = CompletableDeferred()
+                }
             }
         })
     }
@@ -253,6 +254,12 @@ class PortForwardingViewModel @Inject constructor(
         _hostKeyVerification.value = null
         hostKeyVerificationDeferred?.complete(false)
         hostKeyVerificationDeferred = null
+        pendingForward = null
+        _connectionState.value = SSHConnectionState.Disconnected
+        viewModelScope.launch(Dispatchers.IO) {
+            portForwardManager.setClient(null)
+            sshClient.disconnect()
+        }
     }
 
     private suspend fun ensureConnected(): Boolean {

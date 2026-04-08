@@ -68,7 +68,7 @@ class PortForwardManager @Inject constructor() {
 
     private fun startRemoteForward(client: SSHClient, forward: PortForward) {
         // Remote port forwarding: connections to remotePort on server are forwarded to localhost:localPort
-        val remoteBind = SshdSocketAddress(forward.remoteHost, forward.remotePort)
+        val remoteBind = SshdSocketAddress(forward.bindAddress, forward.remotePort)
         val localTarget = SshdSocketAddress("127.0.0.1", forward.localPort)
         val bound = client.startRemotePortForwarding(remoteBind, localTarget)
         forwardHandles[forward.id] = ForwardHandle(forward, bound, PortForwardType.REMOTE)

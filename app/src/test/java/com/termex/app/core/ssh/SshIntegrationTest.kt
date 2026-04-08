@@ -28,9 +28,10 @@ class SshIntegrationTest {
         val verifier = TermexHostKeyVerifier(repo)
         val client = SSHClient(verifier)
         client.setHostKeyVerificationCallback(object : HostKeyVerificationCallback {
-            override suspend fun onVerificationRequired(result: HostKeyVerificationResult): Boolean {
-                verifier.trustHostKey(result)
-                return true
+            override fun onVerificationRequiredAsync(result: HostKeyVerificationResult) {
+                runBlocking {
+                    verifier.trustHostKey(result)
+                }
             }
         })
 

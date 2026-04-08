@@ -39,6 +39,7 @@ import com.termex.app.ui.viewmodel.SettingsViewModel
 fun SettingsScreen(
     onNavigateToKnownHosts: () -> Unit = {},
     onNavigateToSSHConfigBrowser: () -> Unit = {},
+    onNavigateToDiagnostics: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val themeMode by viewModel.themeMode.collectAsState()
@@ -46,6 +47,7 @@ fun SettingsScreen(
     val keepAliveInterval by viewModel.keepAliveInterval.collectAsState()
     val demoModeEnabled by viewModel.demoModeEnabled.collectAsState()
     val biometricLockEnabled by viewModel.biometricLockEnabled.collectAsState()
+    val diagnosticsSummary by viewModel.diagnosticsSummary.collectAsState()
     val biometricAvailability = remember { viewModel.biometricAuthManager.isBiometricAvailable() }
 
     var showKeepAliveMenu by remember { mutableStateOf(false) }
@@ -84,7 +86,15 @@ fun SettingsScreen(
                 item {
                     ListItem(
                         headlineContent = { Text(stringResource(R.string.settings_biometric_lock)) },
-                        supportingContent = { Text(stringResource(if (biometricLockEnabled) R.string.settings_enabled else R.string.settings_disabled)) },
+                        supportingContent = {
+                            Text(
+                                if (biometricLockEnabled) {
+                                    stringResource(R.string.settings_biometric_lock_enabled_supporting)
+                                } else {
+                                    stringResource(R.string.settings_biometric_lock_disabled_supporting)
+                                }
+                            )
+                        },
                         trailingContent = {
                             Switch(
                                 checked = biometricLockEnabled,
@@ -214,6 +224,15 @@ fun SettingsScreen(
                         }
                     }
                 }
+                HorizontalDivider()
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.diagnostics_title)) },
+                    supportingContent = { Text(diagnosticsSummary) },
+                    modifier = Modifier.clickable { onNavigateToDiagnostics() }
+                )
                 HorizontalDivider()
             }
 

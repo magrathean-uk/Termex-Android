@@ -1,27 +1,17 @@
-# Key Rotation Checklist
+# Key rotation checklist
 
-Use this whenever a signing key or API key is suspected to be exposed.
+## Purpose
 
-## 1) Android signing key (upload key)
-- [ ] Generate a new upload keystore.
-- [ ] Update Play Console with the new upload key.
-- [ ] Revoke/retire the old upload key.
-- [ ] Update CI secrets for `RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`.
-- [ ] Verify the release build signs with the new key.
+Use this checklist when rotating signing or SSH-related keys.
 
-## 2) Google APIs / external keys
-- [ ] Regenerate the key in the provider console.
-- [ ] Restrict by package name + SHA-256 signing cert fingerprint.
-- [ ] Update CI/runtime config as needed.
-- [ ] Monitor usage for anomalies.
+## Keep track of
 
-## 3) SSH / server credentials
-- [ ] Change server passwords and/or rotate SSH keys.
-- [ ] Update any stored credentials in the app (encrypted store).
-- [ ] Invalidate old keys on servers.
+- Which keys were rotated
+- Where the replacement key lives in `~/dev/creds/`
+- Which environments need the new value
+- Whether any old material still exists in local caches or build output
 
-## 4) Repo hygiene after rotation
-- [ ] Purge secrets from git history.
-- [ ] Force-push rewritten history.
-- [ ] Re-clone the repo on all dev machines.
-- [ ] Run a secrets scan to confirm clean state.
+## Do not do
+
+- Put private material directly into the repository
+- Treat this checklist as a secret store

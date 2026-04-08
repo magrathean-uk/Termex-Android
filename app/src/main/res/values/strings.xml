@@ -256,4 +256,55 @@
     <!-- Keys -->
     <string name="keys_certificates">Certificates</string>
     <string name="keys_encrypted_badge">Encrypted</string>
+
+
+    <string name="settings_biometric_lock_enabled_supporting">Require device biometrics before Termex opens.</string>
+    <string name="settings_biometric_lock_disabled_supporting">Termex opens directly until biometric lock is enabled.</string>
+
+    <string name="diagnostics_title">Diagnostics</string>
+    <string name="diagnostics_share_subject">Termex diagnostics report</string>
+    <string name="diagnostics_share">Share diagnostics</string>
+    <string name="diagnostics_clear">Clear diagnostics</string>
+    <string name="diagnostics_clear_title">Clear diagnostics</string>
+    <string name="diagnostics_clear_message">Remove all recorded diagnostic events from this device?</string>
+    <string name="diagnostics_clear_saved_sessions">Saved terminal sessions</string>
+    <string name="diagnostics_clear_saved_sessions_supporting">Review and clear restored terminal session state.</string>
+    <string name="diagnostics_clear_saved_sessions_dialog">Remove all saved terminal session state? Active connections are not disconnected.</string>
+    <string name="diagnostics_recent_events">Recent events</string>
+    <string name="diagnostics_no_events">No diagnostic events recorded.</string>
+    <string name="diagnostics_summary_title">Environment summary</string>
+    <string name="diagnostics_summary_connections">%1$d active connections · %2$d saved sessions</string>
+    <string name="diagnostics_summary_servers">%1$d servers · %2$d workplaces</string>
+    <string name="diagnostics_summary_credentials">%1$d keys · %2$d certificates · %3$d known hosts · %4$d issues</string>
+    <string name="diagnostics_summary_events">%1$d diagnostic events</string>
+
+    <plurals name="server_issues_summary">
+        <item quantity="one">%1$d server needs attention</item>
+        <item quantity="other">%1$d servers need attention</item>
+    </plurals>
+    <string name="server_issues_summary_supporting">Fix missing credentials or jump-host references before reconnecting.</string>
+    <string name="home_section_active_sessions">Active Sessions</string>
+    <string name="home_active_session_supporting">%1$s@%2$s:%3$d</string>
+    <string name="home_open_session">Open</string>
+    <string name="home_section_recent_sessions">Recent Sessions</string>
+    <string name="home_recent_session_time">Last active %1$s</string>
+    <string name="home_open_workspace">Open</string>
+    <string name="home_section_tools">Tools</string>
+
+    <string name="connection_report_title">Connection Report</string>
+    <string name="connection_report_state">State</string>
+    <string name="connection_report_target">Target</string>
+    <string name="connection_report_auth">Authentication</string>
+    <string name="connection_report_jump_host">Jump host</string>
+    <string name="connection_report_port_forwards">Port forwards</string>
+    <plurals name="connection_report_port_forward_count">
+        <item quantity="one">%1$d configured forward</item>
+        <item quantity="other">%1$d configured forwards</item>
+    </plurals>
+    <string name="connection_report_security_flags">Security flags</string>
+    <string name="connection_report_forward_agent">Forward agent: %1$s</string>
+    <string name="connection_report_identities_only">Identities only: %1$s</string>
+    <string name="connection_report_recent_events">Recent events</string>
+    <string name="connection_report_no_events">No recent events for this connection.</string>
+
 </resources>

@@ -15,6 +15,7 @@ sealed class Route(val route: String) {
     data object Workplaces : Route("workplaces")
     data object Certificates : Route("certificates")
     data object KnownHosts : Route("known_hosts")
+    data object Diagnostics : Route("diagnostics")
 
     // Nested destinations
     data object Terminal : Route("terminal/{serverId}") {

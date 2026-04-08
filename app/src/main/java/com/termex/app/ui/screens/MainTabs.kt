@@ -88,6 +88,18 @@ fun MainTabs(
                     },
                     onPortForwarding = { server ->
                         rootNavController.navigate(Route.PortForwarding.createRoute(server.id))
+                    },
+                    onOpenMultiTerminal = { workplaceId ->
+                        rootNavController.navigate(Route.MultiTerminal.createRoute(workplaceId))
+                    },
+                    onOpenKnownHosts = {
+                        rootNavController.navigate(Route.KnownHosts.route)
+                    },
+                    onOpenCertificates = {
+                        rootNavController.navigate(Route.Certificates.route)
+                    },
+                    onOpenSSHConfigBrowser = {
+                        rootNavController.navigate(Route.SSHConfigBrowser.route)
                     }
                 )
             }
@@ -114,6 +126,9 @@ fun MainTabs(
                     },
                     onNavigateToSSHConfigBrowser = {
                         rootNavController.navigate(Route.SSHConfigBrowser.route)
+                    },
+                    onNavigateToDiagnostics = {
+                        rootNavController.navigate(Route.Diagnostics.route)
                     }
                 )
             }

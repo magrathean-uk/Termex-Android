@@ -1,20 +1,14 @@
 # Security
 
-This project handles SSH credentials and must be treated as sensitive software.
+## Sensitive data
 
-## Reporting
-If you discover a vulnerability or secret leakage, stop and notify the maintainers immediately.
-Do not open public issues with secrets.
+- SSH private keys, passphrases, and auth tokens stay out of persisted app models.
+- Host keys are validated before trust is accepted.
+- Signing credentials should stay in local developer-only configuration.
 
-## Secret handling
-- Never commit secrets, keys, or credentials.
-- Use `keystore.properties` (ignored) or environment variables for release signing.
-- Store user passwords only in encrypted storage (see `SecurePasswordStore`).
+## Repo rules
 
-## Release signing
-- Keystore files and passwords must be stored in CI secrets.
-- Local dev uses `keystore.properties` (ignored by git).
-
-## Cleanup expectations
-- `local.properties` should be generated locally by Android Studio and never committed.
-- Run a secrets scan before release.
+- Keep `local.properties` and release keystores out of source control.
+- Keep GitHub auth and App Store Connect material in `~/dev/creds/`, not in the repo tree.
+- Keep example files, templates, and setup guidance in the repo.
+- Do not store plaintext secrets in docs or log output.
