@@ -51,6 +51,7 @@ data class SSHConnectionConfig(
     val connectTimeoutMillis: Int = 15_000,
     val readTimeoutMillis: Int = 15_000,
     val authPreference: AuthPreference = AuthPreference.AUTO,
+    val identitiesOnly: Boolean = false,
     val jumpHost: SSHConnectionConfig? = null,
     val forwardAgent: Boolean = false,
     val verifyHostKeyCertificates: Boolean = true
@@ -74,6 +75,7 @@ data class SSHConnectionConfig(
             connectTimeoutMillis == other.connectTimeoutMillis &&
             readTimeoutMillis == other.readTimeoutMillis &&
             authPreference == other.authPreference &&
+            identitiesOnly == other.identitiesOnly &&
             jumpHost == other.jumpHost &&
             forwardAgent == other.forwardAgent &&
             verifyHostKeyCertificates == other.verifyHostKeyCertificates
@@ -90,6 +92,7 @@ data class SSHConnectionConfig(
         result = 31 * result + connectTimeoutMillis
         result = 31 * result + readTimeoutMillis
         result = 31 * result + authPreference.hashCode()
+        result = 31 * result + identitiesOnly.hashCode()
         result = 31 * result + (jumpHost?.hashCode() ?: 0)
         result = 31 * result + forwardAgent.hashCode()
         result = 31 * result + verifyHostKeyCertificates.hashCode()
@@ -194,7 +197,7 @@ class SSHClient @Inject constructor(
         }
     }
 
-    private fun connectInternal(config: SSHConnectionConfig): Pair<SshClient, ClientSession> {
+    private suspend fun connectInternal(config: SSHConnectionConfig): Pair<SshClient, ClientSession> {
         return if (config.jumpHost != null) {
             val (jumpClientLocal, jumpSessionLocal) = connectDirect(config.jumpHost, config.jumpHost.hostname, config.jumpHost.port)
             jumpClient = jumpClientLocal
@@ -217,7 +220,7 @@ class SSHClient @Inject constructor(
         }
     }
 
-    private fun connectDirect(
+    private suspend fun connectDirect(
         config: SSHConnectionConfig,
         connectHost: String,
         connectPort: Int,
@@ -225,6 +228,7 @@ class SSHClient @Inject constructor(
         verifyPort: Int = connectPort
     ): Pair<SshClient, ClientSession> {
         hostKeyVerifier.setTarget(verifyHost, verifyPort)
+        hostKeyVerifier.primeKnownHost(verifyHost, verifyPort)
 
         // Serialize MINA client init to prevent NIO thread pool contention under parallel connects
         val client = synchronized(minaInitLock) {
@@ -277,7 +281,7 @@ class SSHClient @Inject constructor(
         }
 
         keyPairs.forEach { session.addPublicKeyIdentity(it) }
-        if (hasPassword) {
+        if (shouldAddPasswordIdentity(config, hasKey, hasPassword)) {
             session.addPasswordIdentity(config.password)
         }
 
@@ -393,6 +397,17 @@ class SSHClient @Inject constructor(
     }
 
     companion object {
+        internal fun shouldAddPasswordIdentity(
+            config: SSHConnectionConfig,
+            hasKey: Boolean,
+            hasPassword: Boolean
+        ): Boolean {
+            if (!hasPassword) return false
+            if (!hasKey) return true
+            if (!config.identitiesOnly) return true
+            return config.authPreference == AuthPreference.PASSWORD
+        }
+
         // Serializes MINA SshClient setup+start to prevent NIO thread pool contention
         // when multiple connections are initiated simultaneously.
         private val minaInitLock = Any()

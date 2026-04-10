@@ -2,12 +2,16 @@ package com.termex.app.core.ssh
 
 import com.termex.app.domain.KnownHost
 import com.termex.app.domain.KnownHostRepository
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import org.apache.sshd.client.keyverifier.ServerKeyVerifier
 import org.apache.sshd.client.session.ClientSession
 import java.net.InetSocketAddress
 import java.net.SocketAddress
 import java.security.PublicKey
+import java.util.concurrent.ConcurrentHashMap
 import java.util.Date
 import javax.inject.Inject
 
@@ -42,6 +46,8 @@ interface HostKeyVerificationCallback {
 class TermexHostKeyVerifier @Inject constructor(
     private val knownHostRepository: KnownHostRepository
 ) : ServerKeyVerifier {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val knownHostCache = ConcurrentHashMap<String, KnownHost>()
 
     @Volatile
     private var pendingVerification: HostKeyVerificationResult? = null
@@ -70,6 +76,15 @@ class TermexHostKeyVerifier @Inject constructor(
         pendingVerification = null
     }
 
+    suspend fun primeKnownHost(hostname: String, port: Int) {
+        val knownHost = knownHostRepository.getKnownHost(hostname, port)
+        if (knownHost != null) {
+            knownHostCache[cacheKey(hostname, port)] = knownHost
+        } else {
+            knownHostCache.remove(cacheKey(hostname, port))
+        }
+    }
+
     override fun verifyServerKey(
         clientSession: ClientSession?,
         remoteAddress: SocketAddress?,
@@ -80,18 +95,18 @@ class TermexHostKeyVerifier @Inject constructor(
         val fingerprint = KeyUtils.calculateFingerprint(serverKey)
         val keyType = KeyUtils.getKeyTypeString(serverKey.algorithm)
 
-        // runBlocking is acceptable here for a brief DB read on this background thread
-        val existingHost = runBlocking { knownHostRepository.getKnownHost(hostname, port) }
+        val existingHost = knownHostCache[cacheKey(hostname, port)]
 
         return when {
             existingHost != null && existingHost.fingerprint == fingerprint -> {
-                // Known and trusted — update last-seen timestamp, proceed immediately
-                runBlocking { knownHostRepository.updateKnownHost(existingHost.copy(lastSeenAt = Date())) }
+                val refreshedHost = existingHost.copy(lastSeenAt = Date())
+                knownHostCache[cacheKey(hostname, port)] = refreshedHost
+                scope.launch {
+                    knownHostRepository.updateKnownHost(refreshedHost)
+                }
                 true
             }
             existingHost != null -> {
-                // Key has changed — warn user, tentatively accept so connection can complete,
-                // ViewModel will disconnect if user rejects
                 val result = HostKeyVerificationResult.Changed(
                     hostname = hostname, port = port, keyType = keyType,
                     newFingerprint = fingerprint, oldFingerprint = existingHost.fingerprint,
@@ -99,11 +114,9 @@ class TermexHostKeyVerifier @Inject constructor(
                 )
                 pendingVerification = result
                 verificationCallback?.onVerificationRequiredAsync(result)
-                true
+                false
             }
             else -> {
-                // Unknown host — tentatively accept so connection can complete,
-                // ViewModel will disconnect if user rejects
                 val result = HostKeyVerificationResult.Unknown(
                     hostname = hostname, port = port, keyType = keyType,
                     fingerprint = fingerprint, publicKey = serverKey
@@ -168,7 +181,9 @@ class TermexHostKeyVerifier @Inject constructor(
             fingerprint = fingerprint,
             publicKey = KeyUtils.encodePublicKey(publicKey)
         )
+        knownHostCache[cacheKey(hostname, port)] = knownHost
         knownHostRepository.addKnownHost(knownHost)
+        pendingVerification = null
     }
 
     /**
@@ -187,4 +202,6 @@ class TermexHostKeyVerifier @Inject constructor(
         }
         acceptHostKey(hostname, port, keyType, fingerprint, publicKey)
     }
+
+    private fun cacheKey(hostname: String, port: Int): String = "$hostname:$port"
 }

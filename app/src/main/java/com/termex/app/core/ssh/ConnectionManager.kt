@@ -5,6 +5,8 @@ import android.content.Intent
 import androidx.core.content.ContextCompat
 import com.termex.app.data.diagnostics.DiagnosticSeverity
 import com.termex.app.data.diagnostics.DiagnosticsRepository
+import com.termex.app.domain.KnownHost
+import com.termex.app.domain.KnownHostRepository
 import com.termex.app.service.TermexConnectionService
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -34,6 +36,7 @@ import javax.inject.Singleton
 class ConnectionManager @Inject constructor(
     private val sshClientProvider: Provider<SSHClient>,
     private val diagnosticsRepository: DiagnosticsRepository,
+    private val knownHostRepository: KnownHostRepository,
     @ApplicationContext private val context: Context
 ) {
     data class Session(
@@ -183,8 +186,35 @@ class ConnectionManager @Inject constructor(
         scope.launch { sessions[key]?.client?.resizeTerminal(cols, rows, widthPx, heightPx) }
     }
 
-    fun trustHostKey(key: String, result: HostKeyVerificationResult) {
-        scope.launch { sessions[key]?.client?.trustHostKey(result) }
+    suspend fun trustHostKey(result: HostKeyVerificationResult) {
+        when (result) {
+            is HostKeyVerificationResult.Unknown -> {
+                knownHostRepository.addKnownHost(
+                    KnownHost(
+                        hostname = result.hostname,
+                        port = result.port,
+                        keyType = result.keyType,
+                        fingerprint = result.fingerprint,
+                        publicKey = KeyUtils.encodePublicKey(result.publicKey)
+                    )
+                )
+            }
+            is HostKeyVerificationResult.Changed -> {
+                knownHostRepository.getKnownHost(result.hostname, result.port)?.let { existing ->
+                    knownHostRepository.deleteKnownHost(existing)
+                }
+                knownHostRepository.addKnownHost(
+                    KnownHost(
+                        hostname = result.hostname,
+                        port = result.port,
+                        keyType = result.keyType,
+                        fingerprint = result.newFingerprint,
+                        publicKey = KeyUtils.encodePublicKey(result.publicKey)
+                    )
+                )
+            }
+            HostKeyVerificationResult.Trusted -> Unit
+        }
     }
 
     fun disconnect(key: String) {

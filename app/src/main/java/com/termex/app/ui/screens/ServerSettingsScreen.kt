@@ -49,8 +49,10 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.termex.app.R
+import com.termex.app.core.ssh.SSHConfigParser
 import com.termex.app.domain.AuthMode
 import com.termex.app.ui.viewmodel.ServerSettingsViewModel
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,6 +62,10 @@ fun ServerSettingsScreen(
     prefillHost: String = "",
     prefillPort: Int = 0,
     prefillUser: String = "",
+    prefillKeyPath: String = "",
+    prefillJumpHost: String = "",
+    prefillForwardAgent: Boolean = false,
+    prefillIdentitiesOnly: Boolean = false,
     viewModel: ServerSettingsViewModel = hiltViewModel()
 ) {
     val formState by viewModel.formState.collectAsState()
@@ -71,16 +77,35 @@ fun ServerSettingsScreen(
     var showKeyMenu by remember { mutableStateOf(false) }
     var showJumpHostMenu by remember { mutableStateOf(false) }
     var showPasswordVisible by remember { mutableStateOf(false) }
+    var prefillApplied by remember(serverId) { mutableStateOf(false) }
 
-    LaunchedEffect(serverId) {
+    LaunchedEffect(serverId, prefillHost, prefillPort, prefillUser, prefillKeyPath, prefillJumpHost, keys, servers) {
         if (serverId != null) {
             viewModel.loadServer(serverId)
-        } else if (prefillHost.isNotBlank()) {
-            // Pre-fill from SSH config browser import
-            viewModel.updateHostname(prefillHost)
-            if (prefillPort > 0) viewModel.updatePort(prefillPort.toString())
-            if (prefillUser.isNotBlank()) viewModel.updateUsername(prefillUser)
+            return@LaunchedEffect
         }
+        if (prefillApplied || prefillHost.isBlank()) {
+            return@LaunchedEffect
+        }
+
+        prefillApplied = true
+        viewModel.updateName(prefillHost)
+        viewModel.updateHostname(prefillHost)
+        if (prefillPort > 0) viewModel.updatePort(prefillPort.toString())
+        if (prefillUser.isNotBlank()) viewModel.updateUsername(prefillUser)
+        if (prefillKeyPath.isNotBlank()) {
+            val resolvedKeyPath = SSHConfigParser.findMatchingImportedKeyPath(prefillKeyPath, keys)
+                ?: prefillKeyPath
+            viewModel.updateAuthMode(AuthMode.KEY)
+            viewModel.updateSelectedKey(resolvedKeyPath, File(resolvedKeyPath).name)
+        }
+        if (prefillJumpHost.isNotBlank()) {
+            val jumpHostId = SSHConfigParser.resolveJumpHostId(prefillJumpHost, servers)
+            val jumpHostName = servers.firstOrNull { it.id == jumpHostId }?.displayName
+            viewModel.updateJumpHost(jumpHostId, jumpHostName)
+        }
+        viewModel.updateForwardAgent(prefillForwardAgent)
+        viewModel.updateIdentitiesOnly(prefillIdentitiesOnly)
     }
 
     LaunchedEffect(isSaving) {

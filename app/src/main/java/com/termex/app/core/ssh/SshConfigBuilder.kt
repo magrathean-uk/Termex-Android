@@ -66,6 +66,7 @@ class SshConfigBuilder @Inject constructor(
             privateKeyPassphrase = if (privateKeyBytes != null) resolvedPassword else null,
             keepAliveIntervalSeconds = keepAliveInterval,
             authPreference = authPreference,
+            identitiesOnly = server.identitiesOnly,
             jumpHost = jumpHostConfig,
             forwardAgent = server.forwardAgent
         )

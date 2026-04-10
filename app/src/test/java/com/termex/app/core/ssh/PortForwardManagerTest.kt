@@ -6,8 +6,12 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.apache.sshd.common.util.net.SshdSocketAddress
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PortForwardManagerTest {
@@ -23,7 +27,7 @@ class PortForwardManagerTest {
         } returns SshdSocketAddress("0.0.0.0", 15432)
 
         val manager = PortForwardManager()
-        manager.setClient(sshClient)
+        manager.setClient("server-a", sshClient)
 
         val forward = PortForward(
             type = PortForwardType.REMOTE,
@@ -33,8 +37,8 @@ class PortForwardManagerTest {
             bindAddress = "0.0.0.0"
         )
 
-        manager.initializeForwards(listOf(forward))
-        manager.startForward(forward)
+        manager.initializeForwards("server-a", listOf(forward))
+        manager.startForward("server-a", forward)
 
         verify(exactly = 1) {
             sshClient.startRemotePortForwarding(any(), any())
@@ -43,5 +47,44 @@ class PortForwardManagerTest {
         assertEquals(15432, remoteAddress.captured.port)
         assertEquals("127.0.0.1", localAddress.captured.hostName)
         assertEquals(5432, localAddress.captured.port)
+    }
+
+    @Test
+    fun `stop forward uses same session client`() {
+        val clientA = mockk<SSHClient>(relaxed = true)
+        val clientB = mockk<SSHClient>(relaxed = true)
+        every {
+            clientA.startLocalPortForwarding(any(), any())
+        } returns SshdSocketAddress("127.0.0.1", 8080)
+
+        val manager = PortForwardManager()
+        val forward = PortForward(localPort = 8080, remoteHost = "db.internal", remotePort = 5432)
+
+        manager.setClient("server-a", clientA)
+        manager.setClient("server-b", clientB)
+        manager.initializeForwards("server-a", listOf(forward))
+        manager.startForward("server-a", forward)
+        manager.stopForward("server-a", forward.id)
+
+        verify(exactly = 1) { clientA.stopLocalPortForwarding(any()) }
+        verify(exactly = 0) { clientB.stopLocalPortForwarding(any()) }
+    }
+
+    @Test
+    fun `session flow only exposes matching server forwards`() = runBlocking {
+        val manager = PortForwardManager()
+        val serverAForward = PortForward(id = "a", localPort = 1000, remoteHost = "a", remotePort = 2000)
+        val serverBForward = PortForward(id = "b", localPort = 1001, remoteHost = "b", remotePort = 2001)
+
+        manager.initializeForwards("server-a", listOf(serverAForward))
+        manager.initializeForwards("server-b", listOf(serverBForward))
+
+        val sessionA = manager.activeForwards("server-a").first()
+        val sessionB = manager.activeForwards("server-b").first()
+
+        assertEquals(listOf(serverAForward), sessionA.map { it.config })
+        assertEquals(listOf(serverBForward), sessionB.map { it.config })
+        assertFalse(sessionA.any { it.config.id == "b" })
+        assertTrue(sessionB.any { it.config.id == "b" })
     }
 }

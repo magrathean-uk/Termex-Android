@@ -48,7 +48,7 @@ class SshIntegrationTest {
         assertTrue(knownHost != null)
 
         val pfManager = PortForwardManager()
-        pfManager.setClient(client)
+        pfManager.setClient("integration", client)
 
         // Local port forward: localhost:localPort -> remoteHost:remotePort
         val localPort = pickFreePort()
@@ -58,12 +58,12 @@ class SshIntegrationTest {
             remoteHost = config.hostname,
             remotePort = config.port
         )
-        pfManager.initializeForwards(listOf(localForward))
-        assertTrue(pfManager.startForward(localForward).isSuccess)
+        pfManager.initializeForwards("integration", listOf(localForward))
+        assertTrue(pfManager.startForward("integration", localForward).isSuccess)
         delay(200)
         val banner = readBannerFromSocket("127.0.0.1", localPort)
         assertTrue(banner.startsWith("SSH-"))
-        pfManager.stopForward(localForward.id)
+        pfManager.stopForward("integration", localForward.id)
 
         // Dynamic SOCKS5 forward
         val socksPort = pickFreePort()
@@ -73,12 +73,12 @@ class SshIntegrationTest {
             remoteHost = "localhost",
             remotePort = 0
         )
-        pfManager.initializeForwards(listOf(dynamicForward))
-        assertTrue(pfManager.startForward(dynamicForward).isSuccess)
+        pfManager.initializeForwards("integration", listOf(dynamicForward))
+        assertTrue(pfManager.startForward("integration", dynamicForward).isSuccess)
         delay(200)
         val socksBanner = readBannerViaSocks("127.0.0.1", socksPort, config.hostname, config.port)
         assertTrue(socksBanner.startsWith("SSH-"))
-        pfManager.stopForward(dynamicForward.id)
+        pfManager.stopForward("integration", dynamicForward.id)
 
         client.disconnect()
     }

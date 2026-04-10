@@ -2,5 +2,6 @@
 <full-backup-content>
     <include domain="sharedpref" path="."/>
     <exclude domain="sharedpref" path="termex_secrets.xml"/>
+    <exclude domain="sharedpref" path="termex_secrets_v2.xml"/>
     <include domain="database" path="."/>
 </full-backup-content>

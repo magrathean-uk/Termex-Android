@@ -2,6 +2,7 @@ package com.termex.app.core.ssh
 
 import com.termex.app.domain.AuthMode
 import com.termex.app.domain.Server
+import com.termex.app.domain.SSHKey
 import java.io.File
 
 data class SSHConfigHost(
@@ -11,7 +12,8 @@ data class SSHConfigHost(
     val port: Int?,
     val identityFile: String?,
     val proxyJump: String?,
-    val forwardAgent: Boolean?
+    val forwardAgent: Boolean?,
+    val identitiesOnly: Boolean?
 )
 
 object SSHConfigParser {
@@ -29,6 +31,7 @@ object SSHConfigParser {
         var identityFile: String? = null
         var proxyJump: String? = null
         var forwardAgent: Boolean? = null
+        var identitiesOnly: Boolean? = null
 
         fun saveCurrentHost() {
             if (currentHost != null && currentHost != "*") {
@@ -40,7 +43,8 @@ object SSHConfigParser {
                         port = port,
                         identityFile = identityFile,
                         proxyJump = proxyJump,
-                        forwardAgent = forwardAgent
+                        forwardAgent = forwardAgent,
+                        identitiesOnly = identitiesOnly
                     )
                 )
             }
@@ -66,13 +70,15 @@ object SSHConfigParser {
                     identityFile = null
                     proxyJump = null
                     forwardAgent = null
+                    identitiesOnly = null
                 }
                 "hostname" -> hostname = value
                 "user" -> user = value
                 "port" -> port = value.toIntOrNull()
-                "identityfile" -> identityFile = expandPath(value)
+                "identityfile" -> identityFile = value
                 "proxyjump" -> proxyJump = value
                 "forwardagent" -> forwardAgent = value.lowercase() == "yes"
+                "identitiesonly" -> identitiesOnly = value.lowercase() == "yes"
             }
         }
 
@@ -106,16 +112,31 @@ object SSHConfigParser {
                 port = host.port ?: 22,
                 username = user,
                 authMode = if (host.identityFile != null) AuthMode.KEY else AuthMode.PASSWORD,
-                forwardAgent = host.forwardAgent ?: false
+                keyId = host.identityFile,
+                forwardAgent = host.forwardAgent ?: false,
+                identitiesOnly = host.identitiesOnly ?: false
             )
         }
     }
 
-    private fun expandPath(path: String): String {
-        return if (path.startsWith("~")) {
-            path.replaceFirst("~", System.getProperty("user.home") ?: "")
-        } else {
-            path
-        }
+    fun findMatchingImportedKeyPath(identityFile: String?, keys: List<SSHKey>): String? {
+        val basename = identityFile?.let { File(it).name } ?: return null
+        return keys.firstOrNull { it.name == basename || File(it.path).name == basename }?.path
+    }
+
+    fun resolveJumpHostId(proxyJump: String?, availableServers: List<Server>): String? {
+        val token = proxyJump?.split(",")?.firstOrNull()?.trim().orEmpty()
+        if (token.isBlank()) return null
+        val parts = token.split("@", limit = 2)
+        val user = if (parts.size == 2) parts[0] else null
+        val hostPort = if (parts.size == 2) parts[1] else parts[0]
+        val hostParts = hostPort.split(":", limit = 2)
+        val host = hostParts[0]
+        val port = hostParts.getOrNull(1)?.toIntOrNull()
+        return availableServers.firstOrNull { server ->
+            server.hostname == host &&
+                (port == null || server.port == port) &&
+                (user == null || server.username == user)
+        }?.id
     }
 }

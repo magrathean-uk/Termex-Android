@@ -186,13 +186,21 @@ fun TermexApp(
                 },
                 navArgument("prefillHost") { type = NavType.StringType; defaultValue = "" },
                 navArgument("prefillPort") { type = NavType.IntType; defaultValue = 0 },
-                navArgument("prefillUser") { type = NavType.StringType; defaultValue = "" }
+                navArgument("prefillUser") { type = NavType.StringType; defaultValue = "" },
+                navArgument("prefillKeyPath") { type = NavType.StringType; defaultValue = "" },
+                navArgument("prefillJumpHost") { type = NavType.StringType; defaultValue = "" },
+                navArgument("prefillForwardAgent") { type = NavType.BoolType; defaultValue = false },
+                navArgument("prefillIdentitiesOnly") { type = NavType.BoolType; defaultValue = false }
             )
         ) { backStackEntry ->
             val serverId = backStackEntry.arguments?.getString("serverId")
             val prefillHost = backStackEntry.arguments?.getString("prefillHost") ?: ""
             val prefillPort = backStackEntry.arguments?.getInt("prefillPort") ?: 0
             val prefillUser = backStackEntry.arguments?.getString("prefillUser") ?: ""
+            val prefillKeyPath = backStackEntry.arguments?.getString("prefillKeyPath") ?: ""
+            val prefillJumpHost = backStackEntry.arguments?.getString("prefillJumpHost") ?: ""
+            val prefillForwardAgent = backStackEntry.arguments?.getBoolean("prefillForwardAgent") ?: false
+            val prefillIdentitiesOnly = backStackEntry.arguments?.getBoolean("prefillIdentitiesOnly") ?: false
             PaywallGate(
                 paywallRequired = paywallRequired,
                 onSubscribed = { viewModel.refreshSubscription() },
@@ -203,6 +211,10 @@ fun TermexApp(
                     prefillHost = prefillHost,
                     prefillPort = prefillPort,
                     prefillUser = prefillUser,
+                    prefillKeyPath = prefillKeyPath,
+                    prefillJumpHost = prefillJumpHost,
+                    prefillForwardAgent = prefillForwardAgent,
+                    prefillIdentitiesOnly = prefillIdentitiesOnly,
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
@@ -308,7 +320,11 @@ fun TermexApp(
                                 serverId = null,
                                 prefillHost = host.hostname ?: host.host,
                                 prefillPort = host.port ?: 22,
-                                prefillUser = host.user ?: ""
+                                prefillUser = host.user ?: "",
+                                prefillKeyPath = host.identityFile ?: "",
+                                prefillJumpHost = host.proxyJump ?: "",
+                                prefillForwardAgent = host.forwardAgent ?: false,
+                                prefillIdentitiesOnly = host.identitiesOnly ?: false
                             )
                         )
                     }

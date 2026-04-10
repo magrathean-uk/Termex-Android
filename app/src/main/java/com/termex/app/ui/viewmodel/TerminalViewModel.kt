@@ -75,6 +75,7 @@ class TerminalViewModel @Inject constructor(
     val hostKeyVerification: StateFlow<HostKeyVerificationResult?> = _hostKeyVerification.asStateFlow()
 
     private var pendingServerId: String? = null
+    private var pendingReconnectConfig: SSHConnectionConfig? = null
 
     // Snippets
     val snippets: StateFlow<List<Snippet>> = snippetRepository.getAllSnippets()
@@ -203,6 +204,7 @@ class TerminalViewModel @Inject constructor(
 
     private suspend fun performConnect(serverId: String, config: SSHConnectionConfig) {
         sessionKey = serverId
+        pendingReconnectConfig = config
 
         // Fire-and-forget callback — never blocks the MINA NIO2 thread
         val hostKeyCallback = object : HostKeyVerificationCallback {
@@ -229,7 +231,7 @@ class TerminalViewModel @Inject constructor(
         val result = connectionManager.connect(serverId, config, hostKeyCallback)
         if (result.isSuccess) {
             observeSession(serverId)
-        } else {
+        } else if (_hostKeyVerification.value !is HostKeyVerificationResult.Changed) {
             _connectionState.value = SSHConnectionState.Error(
                 result.exceptionOrNull()?.message ?: "Connection failed"
             )
@@ -273,13 +275,15 @@ class TerminalViewModel @Inject constructor(
                 severity = if (verification is HostKeyVerificationResult.Changed) DiagnosticSeverity.WARNING else DiagnosticSeverity.INFO
             )
             // Save key to DB, then clear the dialog and update state
-            connectionManager.trustHostKey(key, verification)
+            connectionManager.trustHostKey(verification)
             _hostKeyVerification.value = null
-            // Session is already connected (tentative accept returned true).
-            // Pull actual state from ConnectionManager; fall back to Connected since
-            // we know the connection succeeded (the dialog wouldn't appear otherwise).
-            _connectionState.value = connectionManager.getState(key)?.value
-                ?: SSHConnectionState.Connected
+            if (verification is HostKeyVerificationResult.Changed) {
+                val reconnectConfig = pendingReconnectConfig ?: return@launch
+                performConnect(key, reconnectConfig)
+            } else {
+                _connectionState.value = connectionManager.getState(key)?.value
+                    ?: SSHConnectionState.Connected
+            }
         }
     }
 
@@ -334,6 +338,7 @@ class TerminalViewModel @Inject constructor(
     fun disconnect() {
         val key = sessionKey ?: return
         sessionKey = null
+        pendingReconnectConfig = null
         viewModelScope.launch(Dispatchers.IO) {
             connectionManager.disconnect(key)
         }
@@ -346,6 +351,7 @@ class TerminalViewModel @Inject constructor(
         val key = sessionKey
         connectionManager.clearHostKeyCallback(key ?: return)
         _hostKeyVerification.value = null
+        pendingReconnectConfig = null
 
         // Save session state in background — connection stays alive in ConnectionManager
         val server = _currentServer.value

@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.termex.app.core.ssh.ConnectionManager
 import com.termex.app.core.ssh.HostKeyVerificationCallback
 import com.termex.app.core.ssh.HostKeyVerificationResult
+import com.termex.app.core.ssh.SSHConnectionConfig
 import com.termex.app.core.ssh.SSHConnectionState
 import com.termex.app.core.ssh.SshConfigBuilder
 import com.termex.app.core.ssh.TerminalBuffer
@@ -51,6 +52,7 @@ class MultiTerminalViewModel @Inject constructor(
     val paneStates: StateFlow<Map<String, TerminalPaneState>> = _paneStates.asStateFlow()
 
     private val pendingPrompts = ConcurrentLinkedDeque<HostKeyPrompt>()
+    private val pendingConfigs = ConcurrentHashMap<String, SSHConnectionConfig>()
     // Guard against duplicate coroutine collectors per pane
     private val observedPanes = ConcurrentHashMap.newKeySet<String>()
 
@@ -94,11 +96,14 @@ class MultiTerminalViewModel @Inject constructor(
                 return@launch
             }
 
+            pendingConfigs[server.id] = config
             val result = connectionManager.connect(server.id, config, hostKeyCallback)
             if (result.isSuccess) {
                 updatePaneState(server.id) { it.copy(connectionState = SSHConnectionState.Connected) }
                 observePane(server.id)
-            } else {
+            } else if (_hostKeyPrompt.value?.serverId != server.id ||
+                _hostKeyPrompt.value?.result !is HostKeyVerificationResult.Changed
+            ) {
                 updatePaneState(server.id) {
                     it.copy(connectionState = SSHConnectionState.Error(
                         result.exceptionOrNull()?.message ?: "Failed"
@@ -145,6 +150,7 @@ class MultiTerminalViewModel @Inject constructor(
 
     fun disconnectServer(serverId: String) {
         clearPromptForServer(serverId)
+        pendingConfigs.remove(serverId)
         connectionManager.clearHostKeyCallback(serverId)
         connectionManager.disconnect(serverId)
         _paneStates.value = _paneStates.value.toMutableMap().apply { remove(serverId) }
@@ -157,9 +163,16 @@ class MultiTerminalViewModel @Inject constructor(
     fun acceptHostKey() {
         val prompt = _hostKeyPrompt.value ?: return
         viewModelScope.launch {
-            connectionManager.trustHostKey(prompt.serverId, prompt.result)
-            // Session is already connected (tentative accept); pull the real state.
-            // Fall back to Connected since we know the connection succeeded.
+            connectionManager.trustHostKey(prompt.result)
+            if (prompt.result is HostKeyVerificationResult.Changed) {
+                val server = servers.value.firstOrNull { it.id == prompt.serverId }
+                val config = pendingConfigs[prompt.serverId]
+                advancePrompt()
+                if (server != null && config != null) {
+                    connectServer(server, config.password)
+                }
+                return@launch
+            }
             updatePaneState(prompt.serverId) {
                 it.copy(connectionState = connectionManager.getState(prompt.serverId)?.value
                     ?: SSHConnectionState.Connected)
@@ -214,6 +227,7 @@ class MultiTerminalViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         observedPanes.clear()
+        pendingConfigs.clear()
         // Only clear callbacks — connections stay alive in ConnectionManager
         servers.value.forEach { server ->
             connectionManager.clearHostKeyCallback(server.id)

@@ -5,11 +5,14 @@ import com.termex.app.domain.PortForwardType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import org.apache.sshd.common.util.net.SshdSocketAddress
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 data class ActivePortForward(
+    val sessionKey: String,
     val config: PortForward,
     val isActive: Boolean = false,
     val error: String? = null
@@ -22,99 +25,116 @@ class PortForwardManager @Inject constructor() {
     val activeForwards: StateFlow<List<ActivePortForward>> = _activeForwards.asStateFlow()
 
     private data class ForwardHandle(
+        val sessionKey: String,
         val forward: PortForward,
         val boundAddress: SshdSocketAddress,
         val type: PortForwardType
     )
 
-    private val forwardHandles = mutableMapOf<String, ForwardHandle>()
-    private var currentClient: SSHClient? = null
+    private val forwardHandles = ConcurrentHashMap<String, ForwardHandle>()
+    private val clients = ConcurrentHashMap<String, SSHClient>()
 
-    fun setClient(client: SSHClient?) {
-        if (client == null) {
-            stopAllForwards()
-        }
-        currentClient = client
+    fun activeForwards(sessionKey: String) = activeForwards.map { forwards ->
+        forwards.filter { it.sessionKey == sessionKey }
     }
 
-    fun startForward(forward: PortForward): Result<Unit> {
-        val client = currentClient ?: return Result.failure(Exception("Not connected"))
-        if (forwardHandles.containsKey(forward.id)) {
+    fun setClient(sessionKey: String, client: SSHClient?) {
+        if (client == null) {
+            stopAllForwards(sessionKey)
+            clients.remove(sessionKey)
+            return
+        }
+        clients[sessionKey] = client
+    }
+
+    fun startForward(sessionKey: String, forward: PortForward): Result<Unit> {
+        val client = clients[sessionKey] ?: return Result.failure(Exception("Not connected"))
+        if (forwardHandles.containsKey(handleKey(sessionKey, forward.id))) {
             return Result.success(Unit)
         }
 
         return try {
             when (forward.type) {
-                PortForwardType.LOCAL -> startLocalForward(client, forward)
-                PortForwardType.REMOTE -> startRemoteForward(client, forward)
-                PortForwardType.DYNAMIC -> startDynamicForward(client, forward)
+                PortForwardType.LOCAL -> startLocalForward(sessionKey, client, forward)
+                PortForwardType.REMOTE -> startRemoteForward(sessionKey, client, forward)
+                PortForwardType.DYNAMIC -> startDynamicForward(sessionKey, client, forward)
             }
 
-            updateForwardState(forward.id, isActive = true)
+            updateForwardState(sessionKey, forward.id, isActive = true)
             Result.success(Unit)
         } catch (e: Exception) {
-            updateForwardState(forward.id, isActive = false, error = e.message)
+            updateForwardState(sessionKey, forward.id, isActive = false, error = e.message)
             Result.failure(e)
         }
     }
 
-    private fun startLocalForward(client: SSHClient, forward: PortForward) {
-        // Local port forwarding: connections to localPort are forwarded to remoteHost:remotePort
+    private fun startLocalForward(sessionKey: String, client: SSHClient, forward: PortForward) {
         val local = SshdSocketAddress("127.0.0.1", forward.localPort)
         val remote = SshdSocketAddress(forward.remoteHost, forward.remotePort)
         val bound = client.startLocalPortForwarding(local, remote)
-        forwardHandles[forward.id] = ForwardHandle(forward, bound, PortForwardType.LOCAL)
+        forwardHandles[handleKey(sessionKey, forward.id)] =
+            ForwardHandle(sessionKey, forward, bound, PortForwardType.LOCAL)
     }
 
-    private fun startRemoteForward(client: SSHClient, forward: PortForward) {
-        // Remote port forwarding: connections to remotePort on server are forwarded to localhost:localPort
+    private fun startRemoteForward(sessionKey: String, client: SSHClient, forward: PortForward) {
         val remoteBind = SshdSocketAddress(forward.bindAddress, forward.remotePort)
         val localTarget = SshdSocketAddress("127.0.0.1", forward.localPort)
         val bound = client.startRemotePortForwarding(remoteBind, localTarget)
-        forwardHandles[forward.id] = ForwardHandle(forward, bound, PortForwardType.REMOTE)
+        forwardHandles[handleKey(sessionKey, forward.id)] =
+            ForwardHandle(sessionKey, forward, bound, PortForwardType.REMOTE)
     }
 
-    private fun startDynamicForward(client: SSHClient, forward: PortForward) {
+    private fun startDynamicForward(sessionKey: String, client: SSHClient, forward: PortForward) {
         val local = SshdSocketAddress("127.0.0.1", forward.localPort)
         val bound = client.startDynamicPortForwarding(local)
-        forwardHandles[forward.id] = ForwardHandle(forward, bound, PortForwardType.DYNAMIC)
+        forwardHandles[handleKey(sessionKey, forward.id)] =
+            ForwardHandle(sessionKey, forward, bound, PortForwardType.DYNAMIC)
     }
 
-    fun stopForward(forwardId: String) {
-        val handle = forwardHandles.remove(forwardId)
+    fun stopForward(sessionKey: String, forwardId: String) {
+        val handle = forwardHandles.remove(handleKey(sessionKey, forwardId))
         handle?.let { h ->
             try {
+                val client = clients[h.sessionKey]
                 when (h.type) {
-                    PortForwardType.LOCAL -> currentClient?.stopLocalPortForwarding(h.boundAddress)
-                    PortForwardType.REMOTE -> currentClient?.stopRemotePortForwarding(h.boundAddress)
-                    PortForwardType.DYNAMIC -> currentClient?.stopDynamicPortForwarding(h.boundAddress)
+                    PortForwardType.LOCAL -> client?.stopLocalPortForwarding(h.boundAddress)
+                    PortForwardType.REMOTE -> client?.stopRemotePortForwarding(h.boundAddress)
+                    PortForwardType.DYNAMIC -> client?.stopDynamicPortForwarding(h.boundAddress)
                 }
             } catch (_: Exception) {
             }
         }
 
-        updateForwardState(forwardId, isActive = false)
+        updateForwardState(sessionKey, forwardId, isActive = false)
     }
 
-    fun stopAllForwards() {
-        forwardHandles.keys.toList().forEach { stopForward(it) }
-        _activeForwards.value = emptyList()
+    fun stopAllForwards(sessionKey: String) {
+        forwardHandles.values
+            .filter { it.sessionKey == sessionKey }
+            .map { it.forward.id }
+            .forEach { stopForward(sessionKey, it) }
+        _activeForwards.value = _activeForwards.value.filterNot { it.sessionKey == sessionKey }
     }
 
-    private fun updateForwardState(id: String, isActive: Boolean, error: String? = null) {
+    private fun updateForwardState(sessionKey: String, id: String, isActive: Boolean, error: String? = null) {
         val current = _activeForwards.value.toMutableList()
-        val index = current.indexOfFirst { it.config.id == id }
+        val index = current.indexOfFirst { it.sessionKey == sessionKey && it.config.id == id }
         if (index >= 0) {
             current[index] = current[index].copy(isActive = isActive, error = error)
             _activeForwards.value = current
         } else {
-            val config = forwardHandles[id]?.forward ?: return
-            current.add(ActivePortForward(config, isActive = isActive, error = error))
+            val config = forwardHandles[handleKey(sessionKey, id)]?.forward ?: return
+            current.add(ActivePortForward(sessionKey, config, isActive = isActive, error = error))
             _activeForwards.value = current
         }
     }
 
-    fun initializeForwards(forwards: List<PortForward>) {
-        _activeForwards.value = forwards.map { ActivePortForward(it, isActive = false) }
+    fun initializeForwards(sessionKey: String, forwards: List<PortForward>) {
+        val otherForwards = _activeForwards.value.filterNot { it.sessionKey == sessionKey }
+        _activeForwards.value = otherForwards + forwards.map {
+            ActivePortForward(sessionKey, it, isActive = false)
+        }
     }
+
+    private fun handleKey(sessionKey: String, forwardId: String): String = "$sessionKey:$forwardId"
 }

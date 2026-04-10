@@ -21,12 +21,16 @@ sealed class Route(val route: String) {
     data object Terminal : Route("terminal/{serverId}") {
         fun createRoute(serverId: String) = "terminal/$serverId"
     }
-    data object ServerSettings : Route("server_settings?serverId={serverId}&prefillHost={prefillHost}&prefillPort={prefillPort}&prefillUser={prefillUser}") {
+    data object ServerSettings : Route("server_settings?serverId={serverId}&prefillHost={prefillHost}&prefillPort={prefillPort}&prefillUser={prefillUser}&prefillKeyPath={prefillKeyPath}&prefillJumpHost={prefillJumpHost}&prefillForwardAgent={prefillForwardAgent}&prefillIdentitiesOnly={prefillIdentitiesOnly}") {
         fun createRoute(
             serverId: String? = null,
             prefillHost: String = "",
             prefillPort: Int = 0,
-            prefillUser: String = ""
+            prefillUser: String = "",
+            prefillKeyPath: String = "",
+            prefillJumpHost: String = "",
+            prefillForwardAgent: Boolean = false,
+            prefillIdentitiesOnly: Boolean = false
         ) = buildString {
             append("server_settings")
             if (serverId != null) append("?serverId=$serverId")
@@ -34,6 +38,10 @@ sealed class Route(val route: String) {
             append("&prefillHost=${android.net.Uri.encode(prefillHost)}")
             append("&prefillPort=$prefillPort")
             append("&prefillUser=${android.net.Uri.encode(prefillUser)}")
+            append("&prefillKeyPath=${android.net.Uri.encode(prefillKeyPath)}")
+            append("&prefillJumpHost=${android.net.Uri.encode(prefillJumpHost)}")
+            append("&prefillForwardAgent=$prefillForwardAgent")
+            append("&prefillIdentitiesOnly=$prefillIdentitiesOnly")
         }
     }
     data object PortForwarding : Route("port_forwarding/{serverId}") {
