@@ -6,6 +6,7 @@
 - Android SDK installed
 - `ANDROID_HOME` or a generated `local.properties` with `sdk.dir=...`
 - network access on first Gradle run so the wrapper and dependencies can download
+- Source `../build-env.sh` before Gradle so `GRADLE_USER_HOME` points at the shared depot.
 
 `local.properties` is intentionally not included in this source bundle.
 
@@ -14,6 +15,7 @@
 From the repo root:
 
 ```bash
+source ../build-env.sh
 ./gradlew assembleDev
 ```
 
@@ -22,6 +24,7 @@ Install the resulting APK from `app/build/outputs/apk/dev/`.
 ## Unit tests
 
 ```bash
+source ../build-env.sh
 ./gradlew testDevUnitTest
 ```
 
@@ -30,6 +33,7 @@ Install the resulting APK from `app/build/outputs/apk/dev/`.
 Start an emulator or connect a device first, then run:
 
 ```bash
+source ../build-env.sh
 ./gradlew connectedDevAndroidTest
 ```
 
@@ -49,6 +53,7 @@ Release signing is driven by either `keystore.properties` or these environment v
 Then run:
 
 ```bash
+source ../build-env.sh
 ./gradlew assembleRelease
 ```
 
