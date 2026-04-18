@@ -46,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -53,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.termex.app.R
 import com.termex.app.domain.Server
+import com.termex.app.ui.AutomationTags
 import com.termex.app.ui.viewmodel.RecentSessionSummary
 import com.termex.app.ui.viewmodel.ServersViewModel
 import com.termex.app.ui.viewmodel.WorkplaceSummary
@@ -62,6 +64,7 @@ import com.termex.app.ui.viewmodel.WorkplaceSummary
 fun ServerListScreen(
     onServerClick: (Server) -> Unit,
     onAddServer: () -> Unit,
+    onOpenSharedServers: () -> Unit,
     onEditServer: (Server) -> Unit,
     onPortForwarding: (Server) -> Unit,
     onOpenMultiTerminal: (String) -> Unit = {},
@@ -109,7 +112,10 @@ fun ServerListScreen(
             )
         },
         floatingActionButton = {
-            androidx.compose.material3.FloatingActionButton(onClick = onAddServer) {
+            androidx.compose.material3.FloatingActionButton(
+                modifier = Modifier.testTag(AutomationTags.SERVERS_ADD),
+                onClick = onAddServer
+            ) {
                 Icon(Icons.Default.Add, contentDescription = stringResource(R.string.action_add_server))
             }
         }
@@ -218,6 +224,7 @@ fun ServerListScreen(
                     onOpenKnownHosts = onOpenKnownHosts,
                     onOpenCertificates = onOpenCertificates,
                     onOpenSSHConfigBrowser = onOpenSSHConfigBrowser,
+                    onOpenSharedServers = onOpenSharedServers,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
@@ -393,7 +400,9 @@ private fun ServerRow(
                             Icon(
                                 Icons.Default.Edit,
                                 contentDescription = stringResource(R.string.action_more),
-                                modifier = Modifier.clickable { showMenu = true }
+                                modifier = Modifier
+                                    .testTag(AutomationTags.serverMenuTag(server.id))
+                                    .clickable { showMenu = true }
                             )
                             androidx.compose.material3.DropdownMenu(
                                 expanded = showMenu,
@@ -427,7 +436,9 @@ private fun ServerRow(
                         }
                     }
                 },
-                modifier = Modifier.clickable { onServerClick(server) }
+                modifier = Modifier
+                    .testTag(AutomationTags.serverRowTag(server.id))
+                    .clickable(enabled = issueMessage == null) { onServerClick(server) }
             )
         }
     }
@@ -507,6 +518,7 @@ private fun ToolsCard(
     onOpenKnownHosts: () -> Unit,
     onOpenCertificates: () -> Unit,
     onOpenSSHConfigBrowser: () -> Unit,
+    onOpenSharedServers: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(modifier = modifier.fillMaxWidth()) {
@@ -529,6 +541,15 @@ private fun ToolsCard(
             supportingContent = { Text(stringResource(R.string.certificates_empty_description)) },
             leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
             modifier = Modifier.clickable { onOpenCertificates() }
+        )
+        HorizontalDivider()
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.shared_servers_title)) },
+            supportingContent = { Text(stringResource(R.string.shared_servers_supporting)) },
+            leadingContent = { Icon(Icons.Default.Dns, contentDescription = null) },
+            modifier = Modifier
+                .testTag(AutomationTags.SHARED_SERVERS_ENTRY)
+                .clickable { onOpenSharedServers() }
         )
     }
 }

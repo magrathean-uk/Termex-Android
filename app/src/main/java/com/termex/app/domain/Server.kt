@@ -11,12 +11,15 @@ data class Server(
     val authMode: AuthMode = AuthMode.PASSWORD,
     val passwordKeychainID: String? = null,
     val keyId: String? = null,
+    val certificatePath: String? = null,
     val workplaceId: String? = null,
     val portForwards: List<PortForward> = emptyList(),
     val jumpHostId: String? = null,
     val forwardAgent: Boolean = false,
     val isDemo: Boolean = false,
-    val identitiesOnly: Boolean = false
+    val identitiesOnly: Boolean = false,
+    val persistentSessionEnabled: Boolean = false,
+    val startupCommand: String? = null
 ) {
     val displayName: String
         get() = name.ifEmpty { hostname }

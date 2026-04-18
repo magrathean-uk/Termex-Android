@@ -10,6 +10,7 @@ import com.termex.app.core.ssh.SSHClient
 import com.termex.app.core.ssh.SSHConnectionConfig
 import com.termex.app.core.ssh.SSHConnectionState
 import com.termex.app.core.ssh.SshConfigBuilder
+import com.termex.app.core.ssh.hasCredentials
 import com.termex.app.domain.PortForward
 import com.termex.app.domain.PortForwardType
 import com.termex.app.domain.Server
@@ -80,10 +81,12 @@ class PortForwardingViewModel @Inject constructor(
         }
         sshClient.setHostKeyVerificationCallback(object : HostKeyVerificationCallback {
             override fun onVerificationRequiredAsync(result: HostKeyVerificationResult) {
-                _hostKeyVerification.value = result
-                _connectionState.value = SSHConnectionState.VerifyingHostKey(result)
-                if (hostKeyVerificationDeferred?.isActive != true) {
-                    hostKeyVerificationDeferred = CompletableDeferred()
+                viewModelScope.launch {
+                    _hostKeyVerification.value = result
+                    _connectionState.value = SSHConnectionState.VerifyingHostKey(result)
+                    if (hostKeyVerificationDeferred?.isActive != true) {
+                        hostKeyVerificationDeferred = CompletableDeferred()
+                    }
                 }
             }
         })
@@ -208,7 +211,7 @@ class PortForwardingViewModel @Inject constructor(
                 if (ensureConnected()) {
                     pendingForward = null
                     portForwardManager.startForward(serverId, portForward)
-                } else if (!_needsPassword.value && _hostKeyVerification.value !is HostKeyVerificationResult.Changed) {
+                } else if (!_needsPassword.value && !isHostKeyPromptActive()) {
                     pendingForward = null
                 }
             }
@@ -223,13 +226,13 @@ class PortForwardingViewModel @Inject constructor(
                 val server = serverRepository.getServer(serverId) ?: return@launch
                 val config = sshConfigBuilder.buildConfig(server, passwordOverride = password) ?: return@launch
                 pendingReconnectConfig = config
-                val result = sshClient.connect(config)
+                val result = sshClient.connect(config, openShell = false)
                 if (result.isSuccess) {
                     _connectionState.value = SSHConnectionState.Connected
                     portForwardManager.setClient(serverId, sshClient)
                     pendingForward?.let { portForwardManager.startForward(serverId, it) }
                     pendingForward = null
-                } else if (_hostKeyVerification.value !is HostKeyVerificationResult.Changed) {
+                } else if (!isHostKeyPromptActive()) {
                     _connectionState.value = SSHConnectionState.Error(
                         result.exceptionOrNull()?.message ?: "Failed to connect"
                     )
@@ -252,14 +255,18 @@ class PortForwardingViewModel @Inject constructor(
             _hostKeyVerification.value = null
             hostKeyVerificationDeferred?.complete(true)
             hostKeyVerificationDeferred = null
-            if (verification is HostKeyVerificationResult.Changed) {
+            if (verification is HostKeyVerificationResult.Unknown || verification is HostKeyVerificationResult.Changed) {
                 val config = pendingReconnectConfig ?: return@launch
-                val result = sshClient.connect(config)
+                val result = sshClient.connect(config, openShell = false)
                 if (result.isSuccess) {
                     _connectionState.value = SSHConnectionState.Connected
                     portForwardManager.setClient(serverId, sshClient)
                     pendingForward?.let { portForwardManager.startForward(serverId, it) }
                     pendingForward = null
+                } else if (!isHostKeyPromptActive()) {
+                    _connectionState.value = SSHConnectionState.Error(
+                        result.exceptionOrNull()?.message ?: "Failed to connect"
+                    )
                 }
             }
         }
@@ -287,7 +294,7 @@ class PortForwardingViewModel @Inject constructor(
                 _connectionState.value = SSHConnectionState.Error("Invalid connection config")
                 return@withLock false
             }
-            if (config.password == null && config.privateKey == null) {
+            if (!config.hasCredentials()) {
                 pendingServerId = server.id
                 _needsPassword.value = true
                 _connectionState.value = SSHConnectionState.Error("Password required")
@@ -295,18 +302,26 @@ class PortForwardingViewModel @Inject constructor(
             }
             _connectionState.value = SSHConnectionState.Connecting
             pendingReconnectConfig = config
-            val result = sshClient.connect(config)
+            val result = sshClient.connect(config, openShell = false)
             if (result.isSuccess) {
                 _connectionState.value = SSHConnectionState.Connected
                 portForwardManager.setClient(serverId, sshClient)
                 return@withLock true
             }
-            if (_hostKeyVerification.value !is HostKeyVerificationResult.Changed) {
+            if (!isHostKeyPromptActive()) {
                 _connectionState.value = SSHConnectionState.Error(
                     result.exceptionOrNull()?.message ?: "Failed to connect"
                 )
             }
             false
+        }
+    }
+
+    private fun isHostKeyPromptActive(): Boolean {
+        return when (_hostKeyVerification.value) {
+            is HostKeyVerificationResult.Unknown,
+            is HostKeyVerificationResult.Changed -> true
+            else -> false
         }
     }
 

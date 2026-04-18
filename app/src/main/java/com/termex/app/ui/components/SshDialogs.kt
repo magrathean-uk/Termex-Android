@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termex.app.R
 import com.termex.app.core.ssh.HostKeyVerificationResult
+import com.termex.app.ui.AutomationTags
 
 @Composable
 fun PasswordDialog(
@@ -51,16 +53,23 @@ fun PasswordDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 16.dp)
+                        .testTag(AutomationTags.PASSWORD_FIELD)
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(password) }) {
+            TextButton(
+                modifier = Modifier.testTag(AutomationTags.PASSWORD_CONNECT),
+                onClick = { onConfirm(password) }
+            ) {
                 Text(stringResource(R.string.ssh_dialog_connect))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                modifier = Modifier.testTag(AutomationTags.PASSWORD_CANCEL),
+                onClick = onDismiss
+            ) {
                 Text(stringResource(R.string.action_cancel))
             }
         }
@@ -134,12 +143,18 @@ fun HostKeyVerificationDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onAccept) {
+            TextButton(
+                modifier = Modifier.testTag(AutomationTags.HOST_KEY_ACCEPT),
+                onClick = onAccept
+            ) {
                 Text(if (isChanged) stringResource(R.string.ssh_dialog_accept_new_key) else stringResource(R.string.ssh_dialog_accept))
             }
         },
         dismissButton = {
-            TextButton(onClick = onReject) {
+            TextButton(
+                modifier = Modifier.testTag(AutomationTags.HOST_KEY_REJECT),
+                onClick = onReject
+            ) {
                 Text(stringResource(R.string.ssh_dialog_reject))
             }
         }

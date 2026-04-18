@@ -10,6 +10,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -22,7 +23,8 @@ import javax.inject.Singleton
 
 @Singleton
 class CertificateRepositoryImpl @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val certificateMetadataStore: CertificateMetadataStore
 ) : CertificateRepository {
 
     private val certsDir: File by lazy {
@@ -35,11 +37,15 @@ class CertificateRepositoryImpl @Inject constructor(
 
     override fun getAllCertificates(): Flow<List<SSHCertificate>> = callbackFlow {
         val job = launch {
-            refreshTrigger.collect {
+            merge(refreshTrigger, certificateMetadataStore.changesFlow()).collect {
                 val files = certsDir.listFiles() ?: emptyArray()
-                val certs = files.map { file ->
+                val actualCertificates = files.map { file ->
                     parseCertificate(file)
-                }.sortedBy { it.name }
+                }
+                val metadataOnlyCertificates = certificateMetadataStore.getAll().filter { metadataCert ->
+                    actualCertificates.none { actual -> actual.path == metadataCert.path }
+                }
+                val certs = (actualCertificates + metadataOnlyCertificates).sortedBy { it.name }
                 trySend(certs)
             }
         }
@@ -52,12 +58,18 @@ class CertificateRepositoryImpl @Inject constructor(
         val certFile = File(certsDir, sanitizedName)
         require(certFile.canonicalPath.startsWith(certsDir.canonicalPath)) { "Invalid certificate path" }
         certFile.writeText(content.trim())
+        certificateMetadataStore.deleteByPath(certFile.absolutePath)
         refreshTrigger.emit(Unit)
     }
 
     override suspend fun deleteCertificate(certificate: SSHCertificate) = withContext(Dispatchers.IO) {
         File(certsDir, certificate.name).delete()
+        certificateMetadataStore.deleteByPath(certificate.path)
         refreshTrigger.emit(Unit)
+    }
+
+    override fun getCertificatePath(name: String): String {
+        return File(certsDir, name).absolutePath
     }
 
     private fun parseCertificate(file: File): SSHCertificate {

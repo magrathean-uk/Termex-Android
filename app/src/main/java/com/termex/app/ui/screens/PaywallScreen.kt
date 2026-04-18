@@ -59,6 +59,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -69,6 +70,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.android.billingclient.api.ProductDetails
 import com.termex.app.R
 import com.termex.app.core.billing.SubscriptionState
+import com.termex.app.ui.AutomationTags
 import com.termex.app.ui.viewmodel.AppViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -145,6 +147,7 @@ fun PaywallScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .testTag(AutomationTags.PAYWALL_SCREEN)
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(GradientStart, GradientMid, GradientEnd)
@@ -282,7 +285,9 @@ fun PaywallScreen(
                 when {
                     isLoadingPrice -> {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier
+                                .size(32.dp)
+                                .testTag(AutomationTags.PAYWALL_PRICE_LOADING),
                             color = AccentTeal
                         )
                     }
@@ -292,10 +297,14 @@ fun PaywallScreen(
                                 text = stringResource(R.string.paywall_unable_to_load),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color.White.copy(alpha = 0.7f),
-                                textAlign = TextAlign.Center
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.testTag(AutomationTags.PAYWALL_ERROR)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
-                            TextButton(onClick = loadProductDetails) {
+                            TextButton(
+                                onClick = loadProductDetails,
+                                modifier = Modifier.testTag(AutomationTags.PAYWALL_RETRY)
+                            ) {
                                 Text(stringResource(R.string.paywall_tap_to_retry), color = AccentTeal)
                             }
                         }
@@ -376,6 +385,7 @@ fun PaywallScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp)
+                            .testTag(AutomationTags.PAYWALL_SUBSCRIBE)
                             .scale(if (productDetails != null) pulseScale else 1f),
                         enabled = productDetails != null,
                         colors = ButtonDefaults.buttonColors(
@@ -400,7 +410,9 @@ fun PaywallScreen(
                     
                     OutlinedButton(
                         onClick = onRestore,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag(AutomationTags.PAYWALL_RESTORE),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = Color.White.copy(alpha = 0.8f)
@@ -413,7 +425,9 @@ fun PaywallScreen(
                     if (onDemoMode != null) {
                         TextButton(
                             onClick = onDemoMode,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag(AutomationTags.PAYWALL_DEMO_MODE)
                         ) {
                             Text(
                                 text = stringResource(R.string.paywall_try_demo_mode),

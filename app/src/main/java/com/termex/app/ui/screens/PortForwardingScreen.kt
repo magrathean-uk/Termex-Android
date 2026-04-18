@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -46,6 +47,7 @@ import com.termex.app.R
 import com.termex.app.ui.components.HostKeyVerificationDialog
 import com.termex.app.ui.components.PasswordDialog
 import com.termex.app.domain.PortForwardType
+import com.termex.app.ui.AutomationTags
 import com.termex.app.ui.viewmodel.PortForwardingViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,6 +57,7 @@ fun PortForwardingScreen(
     onNavigateBack: () -> Unit,
     viewModel: PortForwardingViewModel = hiltViewModel()
 ) {
+    val supportedTypes = listOf(PortForwardType.LOCAL, PortForwardType.REMOTE, PortForwardType.DYNAMIC)
     val server by viewModel.server.collectAsState()
     val showDialog by viewModel.showDialog.collectAsState()
     val formState by viewModel.formState.collectAsState()
@@ -90,12 +93,15 @@ fun PortForwardingScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { viewModel.showAddDialog() }) {
+            FloatingActionButton(
+                modifier = Modifier.testTag(AutomationTags.PORT_FORWARD_ADD),
+                onClick = { viewModel.showAddDialog() }
+            ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Port Forward")
             }
         }
     ) { padding ->
-        val portForwards = server?.portForwards ?: emptyList()
+        val portForwards = server?.portForwards?.filter { it.type in supportedTypes } ?: emptyList()
 
         if (portForwards.isEmpty()) {
             Box(
@@ -159,13 +165,14 @@ fun PortForwardingScreen(
                             readOnly = true,
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .testTag(AutomationTags.PORT_FORWARD_TYPE)
                                 .clickable { showTypeMenu = true }
                         )
                         DropdownMenu(
                             expanded = showTypeMenu,
                             onDismissRequest = { showTypeMenu = false }
                         ) {
-                            PortForwardType.entries.forEach { type ->
+                            supportedTypes.forEach { type ->
                                 DropdownMenuItem(
                                     text = { Text(type.name) },
                                     onClick = {
@@ -184,6 +191,7 @@ fun PortForwardingScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 8.dp)
+                            .testTag(AutomationTags.PORT_FORWARD_LOCAL_PORT)
                     )
 
                     if (formState.type != PortForwardType.DYNAMIC) {
@@ -194,6 +202,7 @@ fun PortForwardingScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 8.dp)
+                                .testTag(AutomationTags.PORT_FORWARD_REMOTE_HOST)
                         )
 
                         OutlinedTextField(
@@ -203,6 +212,7 @@ fun PortForwardingScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 8.dp)
+                                .testTag(AutomationTags.PORT_FORWARD_REMOTE_PORT)
                         )
                     }
 
@@ -215,12 +225,14 @@ fun PortForwardingScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 8.dp)
+                                .testTag(AutomationTags.PORT_FORWARD_BIND_ADDRESS)
                         )
                     }
                 }
             },
             confirmButton = {
                 TextButton(
+                    modifier = Modifier.testTag(AutomationTags.PORT_FORWARD_SAVE),
                     onClick = { viewModel.savePortForward() },
                     enabled = formState.localPort.isNotBlank() &&
                             (formState.type == PortForwardType.DYNAMIC || formState.remotePort.isNotBlank())

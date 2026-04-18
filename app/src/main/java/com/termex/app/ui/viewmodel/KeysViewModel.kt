@@ -2,8 +2,10 @@ package com.termex.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.termex.app.domain.AuthMode
 import com.termex.app.domain.SSHKey
 import com.termex.app.domain.KeyRepository
+import com.termex.app.domain.ServerRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -15,7 +17,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class KeysViewModel @Inject constructor(
-    private val keyRepository: KeyRepository
+    private val keyRepository: KeyRepository,
+    private val serverRepository: ServerRepository
 ) : ViewModel() {
     
     val keys: StateFlow<List<SSHKey>> = keyRepository.getAllKeys()
@@ -43,9 +46,9 @@ class KeysViewModel @Inject constructor(
         _showImportDialog.value = false
     }
     
-    fun generateKey(name: String, bits: Int = 2048) {
+    fun generateKey(name: String) {
         viewModelScope.launch {
-            keyRepository.generateKey(name, "RSA", bits)
+            keyRepository.generateKey(name)
             hideGenerateDialog()
         }
     }
@@ -60,6 +63,40 @@ class KeysViewModel @Inject constructor(
     fun deleteKey(key: SSHKey) {
         viewModelScope.launch {
             keyRepository.deleteKey(key)
+        }
+    }
+
+    fun repairServerWithSelectedKey(serverId: String, key: SSHKey, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            val server = serverRepository.getServer(serverId) ?: return@launch
+            serverRepository.updateServer(
+                server.copy(
+                    authMode = AuthMode.KEY,
+                    keyId = key.path
+                )
+            )
+            onComplete()
+        }
+    }
+
+    fun importKeyForServer(
+        serverId: String,
+        name: String,
+        privateContent: String,
+        publicContent: String?,
+        onComplete: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            keyRepository.importKey(name, privateContent, publicContent)
+            val server = serverRepository.getServer(serverId) ?: return@launch
+            serverRepository.updateServer(
+                server.copy(
+                    authMode = AuthMode.KEY,
+                    keyId = keyRepository.getKeyPath(name)
+                )
+            )
+            hideImportDialog()
+            onComplete()
         }
     }
 }

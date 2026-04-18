@@ -181,6 +181,16 @@ class ConnectionManager @Inject constructor(
         scope.launch { sessions[key]?.client?.sendData(data) }
     }
 
+    suspend fun runShellCommand(
+        key: String,
+        command: String,
+        expectedFragment: String? = null,
+        timeoutMillis: Long = 5_000L
+    ): String {
+        val session = sessions[key] ?: error("No session for $key")
+        return session.client.runShellCommand(command, expectedFragment, timeoutMillis)
+    }
+
     fun resizeTerminal(key: String, cols: Int, rows: Int, widthPx: Int, heightPx: Int) {
         sessions[key]?.buffer?.resize(cols, rows)
         scope.launch { sessions[key]?.client?.resizeTerminal(cols, rows, widthPx, heightPx) }

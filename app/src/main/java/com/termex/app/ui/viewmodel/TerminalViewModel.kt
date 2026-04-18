@@ -3,13 +3,16 @@ package com.termex.app.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.termex.app.core.demo.DemoTerminal
+import com.termex.app.core.PersistedRootRoute
 import com.termex.app.core.ssh.ConnectionManager
 import com.termex.app.core.ssh.HostKeyVerificationCallback
 import com.termex.app.core.ssh.HostKeyVerificationResult
 import com.termex.app.core.ssh.SSHConnectionConfig
 import com.termex.app.core.ssh.SSHConnectionState
 import com.termex.app.core.ssh.SshConfigBuilder
+import com.termex.app.core.ssh.PersistentTmuxSessionPlan
 import com.termex.app.core.ssh.TerminalBuffer
+import com.termex.app.core.ssh.hasCredentials
 import com.termex.app.data.diagnostics.DiagnosticEvent
 import com.termex.app.data.diagnostics.DiagnosticSeverity
 import com.termex.app.data.diagnostics.DiagnosticsRepository
@@ -118,6 +121,7 @@ class TerminalViewModel @Inject constructor(
             _hostKeyVerification.value = null
 
             if (serverId == Server.DEMO_SERVER_ID) {
+                userPreferencesRepository.setPersistedRootRoute(PersistedRootRoute.server(serverId))
                 connectToDemo()
                 return@launch
             }
@@ -133,6 +137,8 @@ class TerminalViewModel @Inject constructor(
             }
             _currentServer.value = server
 
+            userPreferencesRepository.setPersistedRootRoute(PersistedRootRoute.server(serverId))
+
             if (server.isDemo) {
                 connectToDemo()
                 return@launch
@@ -142,6 +148,9 @@ class TerminalViewModel @Inject constructor(
             if (connectionManager.isConnected(serverId)) {
                 sessionKey = serverId
                 _connectionState.value = SSHConnectionState.Connected
+                if (server.persistentSessionEnabled) {
+                    userPreferencesRepository.setPersistentSessionResumeServerId(serverId)
+                }
                 observeSession(serverId)
                 return@launch
             }
@@ -151,7 +160,7 @@ class TerminalViewModel @Inject constructor(
                 _connectionState.value = SSHConnectionState.Error("Invalid connection config")
                 return@launch
             }
-            if (config.password == null && config.privateKey == null) {
+            if (!config.hasCredentials()) {
                 pendingServerId = server.id
                 _needsPassword.value = true
                 return@launch
@@ -210,6 +219,8 @@ class TerminalViewModel @Inject constructor(
         val hostKeyCallback = object : HostKeyVerificationCallback {
             override fun onVerificationRequiredAsync(result: HostKeyVerificationResult) {
                 viewModelScope.launch {
+                    _hostKeyVerification.value = result
+                    _connectionState.value = SSHConnectionState.VerifyingHostKey(result)
                     diagnosticsRepository.record(
                         category = "host_key",
                         title = when (result) {
@@ -221,8 +232,6 @@ class TerminalViewModel @Inject constructor(
                         serverId = serverId,
                         severity = if (result is HostKeyVerificationResult.Changed) DiagnosticSeverity.WARNING else DiagnosticSeverity.INFO
                     )
-                    _hostKeyVerification.value = result
-                    _connectionState.value = SSHConnectionState.VerifyingHostKey(result)
                 }
             }
         }
@@ -230,8 +239,9 @@ class TerminalViewModel @Inject constructor(
         _connectionState.value = SSHConnectionState.Connecting
         val result = connectionManager.connect(serverId, config, hostKeyCallback)
         if (result.isSuccess) {
+            onConnected(serverId)
             observeSession(serverId)
-        } else if (_hostKeyVerification.value !is HostKeyVerificationResult.Changed) {
+        } else if (!isHostKeyPromptActive()) {
             _connectionState.value = SSHConnectionState.Error(
                 result.exceptionOrNull()?.message ?: "Connection failed"
             )
@@ -277,7 +287,7 @@ class TerminalViewModel @Inject constructor(
             // Save key to DB, then clear the dialog and update state
             connectionManager.trustHostKey(verification)
             _hostKeyVerification.value = null
-            if (verification is HostKeyVerificationResult.Changed) {
+            if (verification is HostKeyVerificationResult.Unknown || verification is HostKeyVerificationResult.Changed) {
                 val reconnectConfig = pendingReconnectConfig ?: return@launch
                 performConnect(key, reconnectConfig)
             } else {
@@ -337,9 +347,13 @@ class TerminalViewModel @Inject constructor(
 
     fun disconnect() {
         val key = sessionKey ?: return
+        val currentServer = _currentServer.value
         sessionKey = null
         pendingReconnectConfig = null
         viewModelScope.launch(Dispatchers.IO) {
+            if (currentServer?.persistentSessionEnabled == true) {
+                userPreferencesRepository.setPersistentSessionResumeServerId(null)
+            }
             connectionManager.disconnect(key)
         }
         _connectionState.value = SSHConnectionState.Disconnected
@@ -390,5 +404,32 @@ class TerminalViewModel @Inject constructor(
         is HostKeyVerificationResult.Unknown -> "${result.hostname}:${result.port} ${result.fingerprint}"
         is HostKeyVerificationResult.Changed -> "${result.hostname}:${result.port} ${result.oldFingerprint} → ${result.newFingerprint}"
         HostKeyVerificationResult.Trusted -> "Trusted host"
+    }
+
+    private fun onConnected(serverId: String) {
+        val server = _currentServer.value ?: return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            if (server.persistentSessionEnabled) {
+                userPreferencesRepository.setPersistentSessionResumeServerId(serverId)
+                connectionManager.sendData(serverId, PersistentTmuxSessionPlan.attachCommand(serverId))
+            }
+
+            val startupCommand = server.startupCommand?.trim().orEmpty()
+            if (startupCommand.isNotEmpty()) {
+                if (server.persistentSessionEnabled) {
+                    kotlinx.coroutines.delay(250)
+                }
+                connectionManager.sendData(serverId, "$startupCommand\n")
+            }
+        }
+    }
+
+    private fun isHostKeyPromptActive(): Boolean {
+        return when (_hostKeyVerification.value) {
+            is HostKeyVerificationResult.Unknown,
+            is HostKeyVerificationResult.Changed -> true
+            else -> false
+        }
     }
 }

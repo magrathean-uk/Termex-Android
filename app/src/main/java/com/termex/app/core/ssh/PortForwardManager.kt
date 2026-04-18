@@ -15,7 +15,8 @@ data class ActivePortForward(
     val sessionKey: String,
     val config: PortForward,
     val isActive: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val boundAddress: SshdSocketAddress? = null
 )
 
 @Singleton
@@ -36,6 +37,16 @@ class PortForwardManager @Inject constructor() {
 
     fun activeForwards(sessionKey: String) = activeForwards.map { forwards ->
         forwards.filter { it.sessionKey == sessionKey }
+    }
+
+    suspend fun runShellCommand(
+        sessionKey: String,
+        command: String,
+        expectedFragment: String? = null,
+        timeoutMillis: Long = 5_000L
+    ): String {
+        val client = clients[sessionKey] ?: error("Not connected")
+        return client.runShellCommand(command, expectedFragment, timeoutMillis)
     }
 
     fun setClient(sessionKey: String, client: SSHClient?) {
@@ -63,13 +74,20 @@ class PortForwardManager @Inject constructor() {
             updateForwardState(sessionKey, forward.id, isActive = true)
             Result.success(Unit)
         } catch (e: Exception) {
-            updateForwardState(sessionKey, forward.id, isActive = false, error = e.message)
-            Result.failure(e)
+            val detail = buildString {
+                append(e::class.java.simpleName)
+                e.message?.takeIf { it.isNotBlank() }?.let {
+                    append(": ")
+                    append(it)
+                }
+            }
+            updateForwardState(sessionKey, forward.id, isActive = false, error = detail)
+            Result.failure(IllegalStateException(detail, e))
         }
     }
 
     private fun startLocalForward(sessionKey: String, client: SSHClient, forward: PortForward) {
-        val local = SshdSocketAddress("127.0.0.1", forward.localPort)
+        val local = SshdSocketAddress(forward.bindAddress, forward.localPort)
         val remote = SshdSocketAddress(forward.remoteHost, forward.remotePort)
         val bound = client.startLocalPortForwarding(local, remote)
         forwardHandles[handleKey(sessionKey, forward.id)] =
@@ -77,15 +95,15 @@ class PortForwardManager @Inject constructor() {
     }
 
     private fun startRemoteForward(sessionKey: String, client: SSHClient, forward: PortForward) {
-        val remoteBind = SshdSocketAddress(forward.bindAddress, forward.remotePort)
-        val localTarget = SshdSocketAddress("127.0.0.1", forward.localPort)
+        val remoteBind = SshdSocketAddress(normalizeRemoteBindAddress(forward.bindAddress), forward.remotePort)
+        val localTarget = SshdSocketAddress(forward.remoteHost, forward.localPort)
         val bound = client.startRemotePortForwarding(remoteBind, localTarget)
         forwardHandles[handleKey(sessionKey, forward.id)] =
             ForwardHandle(sessionKey, forward, bound, PortForwardType.REMOTE)
     }
 
     private fun startDynamicForward(sessionKey: String, client: SSHClient, forward: PortForward) {
-        val local = SshdSocketAddress("127.0.0.1", forward.localPort)
+        val local = SshdSocketAddress(forward.bindAddress, forward.localPort)
         val bound = client.startDynamicPortForwarding(local)
         forwardHandles[handleKey(sessionKey, forward.id)] =
             ForwardHandle(sessionKey, forward, bound, PortForwardType.DYNAMIC)
@@ -119,12 +137,25 @@ class PortForwardManager @Inject constructor() {
     private fun updateForwardState(sessionKey: String, id: String, isActive: Boolean, error: String? = null) {
         val current = _activeForwards.value.toMutableList()
         val index = current.indexOfFirst { it.sessionKey == sessionKey && it.config.id == id }
+        val handle = forwardHandles[handleKey(sessionKey, id)]
         if (index >= 0) {
-            current[index] = current[index].copy(isActive = isActive, error = error)
+            current[index] = current[index].copy(
+                isActive = isActive,
+                error = error,
+                boundAddress = handle?.boundAddress ?: current[index].boundAddress
+            )
             _activeForwards.value = current
         } else {
-            val config = forwardHandles[handleKey(sessionKey, id)]?.forward ?: return
-            current.add(ActivePortForward(sessionKey, config, isActive = isActive, error = error))
+            val config = handle?.forward ?: return
+            current.add(
+                ActivePortForward(
+                    sessionKey = sessionKey,
+                    config = config,
+                    isActive = isActive,
+                    error = error,
+                    boundAddress = handle?.boundAddress
+                )
+            )
             _activeForwards.value = current
         }
     }
@@ -133,6 +164,17 @@ class PortForwardManager @Inject constructor() {
         val otherForwards = _activeForwards.value.filterNot { it.sessionKey == sessionKey }
         _activeForwards.value = otherForwards + forwards.map {
             ActivePortForward(sessionKey, it, isActive = false)
+        }
+    }
+
+    private fun normalizeRemoteBindAddress(address: String): String {
+        return normalizeLoopbackHost(address)
+    }
+
+    private fun normalizeLoopbackHost(address: String): String {
+        return when (address.trim()) {
+            "127.0.0.1", "::1" -> "localhost"
+            else -> address
         }
     }
 

@@ -1,8 +1,10 @@
 package com.termex.app.core.security
 
 import android.content.Context
+import android.os.Build
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
+import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
@@ -12,14 +14,26 @@ import javax.inject.Singleton
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
+interface BiometricAuthGateway {
+    fun isBiometricAvailable(): BiometricAvailability
+
+    suspend fun authenticate(activity: FragmentActivity): BiometricResult
+}
+
 @Singleton
 class BiometricAuthManager @Inject constructor(
     @ApplicationContext private val context: Context
-) {
-    
-    fun isBiometricAvailable(): BiometricAvailability {
+) : BiometricAuthGateway {
+    private val supportedAuthenticators: Int
+        get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            BIOMETRIC_STRONG or DEVICE_CREDENTIAL
+        } else {
+            BIOMETRIC_STRONG
+        }
+
+    override fun isBiometricAvailable(): BiometricAvailability {
         val biometricManager = BiometricManager.from(context)
-        return when (biometricManager.canAuthenticate(BIOMETRIC_STRONG)) {
+        return when (biometricManager.canAuthenticate(supportedAuthenticators)) {
             BiometricManager.BIOMETRIC_SUCCESS -> BiometricAvailability.Available
             BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> BiometricAvailability.NoHardware
             BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> BiometricAvailability.HardwareUnavailable
@@ -31,15 +45,25 @@ class BiometricAuthManager @Inject constructor(
         }
     }
 
-    suspend fun authenticate(activity: FragmentActivity): BiometricResult = suspendCoroutine { continuation ->
+    override suspend fun authenticate(activity: FragmentActivity): BiometricResult = suspendCoroutine { continuation ->
         val executor = ContextCompat.getMainExecutor(context)
-        
-        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+
+        val promptBuilder = BiometricPrompt.PromptInfo.Builder()
             .setTitle("Unlock Termex")
-            .setSubtitle("Use your biometric credential to unlock")
-            .setNegativeButtonText("Cancel")
-            .setAllowedAuthenticators(BIOMETRIC_STRONG)
-            .build()
+            .setSubtitle(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    "Use your biometric credential or screen lock to unlock"
+                } else {
+                    "Use your biometric credential to unlock"
+                }
+            )
+            .setAllowedAuthenticators(supportedAuthenticators)
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            promptBuilder.setNegativeButtonText("Cancel")
+        }
+
+        val promptInfo = promptBuilder.build()
 
         val biometricPrompt = BiometricPrompt(
             activity,

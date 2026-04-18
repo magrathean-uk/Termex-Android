@@ -8,13 +8,18 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter
 import java.io.File
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
 import java.io.FileWriter
 import java.security.KeyPairGenerator
+import java.security.PublicKey
 import java.security.interfaces.RSAPrivateKey
 import java.security.interfaces.RSAPublicKey
 import java.util.Base64
@@ -24,7 +29,8 @@ import javax.inject.Singleton
 
 @Singleton
 class KeyRepositoryImpl @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val keyMetadataStore: KeyMetadataStore
 ) : KeyRepository {
 
     private val keysDir: File by lazy {
@@ -40,9 +46,9 @@ class KeyRepositoryImpl @Inject constructor(
     override fun getAllKeys(): Flow<List<SSHKey>> = callbackFlow {
         val scope = this
         val job = scope.launch {
-            refreshTrigger.collect {
+            merge(refreshTrigger, keyMetadataStore.changesFlow()).collect {
                 val files = keysDir.listFiles { _, name -> !name.endsWith(".pub") } ?: emptyArray()
-                val keys = files.map { file ->
+                val actualKeys = files.map { file ->
                     val pubKeyFile = File(keysDir, "${file.name}.pub")
                     val pubKeyContent = if (pubKeyFile.exists()) pubKeyFile.readText().trim() else ""
 
@@ -66,7 +72,11 @@ class KeyRepositoryImpl @Inject constructor(
                         fingerprint = fingerprint,
                         lastModified = Date(file.lastModified())
                     )
-                }.sortedBy { it.name }
+                }
+                val metadataOnlyKeys = keyMetadataStore.getAll().filter { metadataKey ->
+                    actualKeys.none { actual -> actual.path == metadataKey.path }
+                }
+                val keys = (actualKeys + metadataOnlyKeys).sortedBy { it.name }
                 trySend(keys)
             }
         }
@@ -74,52 +84,70 @@ class KeyRepositoryImpl @Inject constructor(
     }
 
     override suspend fun generateKey(name: String, type: String, bits: Int) = withContext(Dispatchers.IO) {
-        // Only RSA supported for now in UI flow, but scalable
-        val keyGen = KeyPairGenerator.getInstance("RSA")
-        keyGen.initialize(bits)
+        val algorithm = if (type.equals("RSA", ignoreCase = true)) "RSA" else "Ed25519"
+        val keyGen = if (algorithm == "RSA") {
+            KeyPairGenerator.getInstance(algorithm)
+        } else {
+            KeyPairGenerator.getInstance(algorithm, org.bouncycastle.jce.provider.BouncyCastleProvider())
+        }
+        if (algorithm == "RSA") {
+            keyGen.initialize(bits)
+        }
         val pair = keyGen.generateKeyPair()
-        
-        val privateKey = pair.private as RSAPrivateKey
-        val publicKey = pair.public as RSAPublicKey
-        
+
         val privateKeyFile = File(keysDir, name)
         val publicKeyFile = File(keysDir, "$name.pub")
-        
-        // Write Private Key (PEM)
+
         FileWriter(privateKeyFile).use { fw ->
             JcaPEMWriter(fw).use { pemWriter ->
-                pemWriter.writeObject(privateKey)
+                pemWriter.writeObject(pair.private)
             }
         }
-        
-        // Write Public Key (OpenSSH format)
-        // Format: ssh-rsa <base64> name
-        val pubKeyString = encodePublicKey(publicKey, name)
+
+        val pubKeyString = if (algorithm == "RSA") {
+            encodeRsaPublicKey(pair.public as RSAPublicKey, name)
+        } else {
+            encodeEd25519PublicKey(pair.public, name)
+        }
         publicKeyFile.writeText(pubKeyString)
-        
+
+        keyMetadataStore.deleteByPath(privateKeyFile.absolutePath)
         refreshTrigger.emit(Unit)
     }
-    
-    private fun encodePublicKey(publicKey: RSAPublicKey, comment: String): String {
+
+    private fun encodeRsaPublicKey(publicKey: RSAPublicKey, comment: String): String {
         val byteOs = java.io.ByteArrayOutputStream()
         val dos = java.io.DataOutputStream(byteOs)
-        
+
         val type = "ssh-rsa".toByteArray()
         dos.writeInt(type.size)
         dos.write(type)
-        
+
         val e = publicKey.publicExponent.toByteArray()
         dos.writeInt(e.size)
         dos.write(e)
-        
+
         val m = publicKey.modulus.toByteArray()
-        // Ensure positive modulus logic if needed (usually toByteArray handles signed, might need leading 0)
-        // BigInteger.toByteArray returns signed, so if top bit set, it adds 0x00. Correct for SSH.
         dos.writeInt(m.size)
         dos.write(m)
-        
+
         val b64 = Base64.getEncoder().encodeToString(byteOs.toByteArray())
         return "ssh-rsa $b64 $comment"
+    }
+
+    private fun encodeEd25519PublicKey(publicKey: PublicKey, comment: String): String {
+        val publicKeyBytes = SubjectPublicKeyInfo.getInstance(publicKey.encoded).publicKeyData.bytes
+        val byteOs = ByteArrayOutputStream()
+        DataOutputStream(byteOs).use { dos ->
+            val type = "ssh-ed25519".toByteArray()
+            dos.writeInt(type.size)
+            dos.write(type)
+            dos.writeInt(publicKeyBytes.size)
+            dos.write(publicKeyBytes)
+        }
+
+        val b64 = Base64.getEncoder().encodeToString(byteOs.toByteArray())
+        return "ssh-ed25519 $b64 $comment"
     }
 
     override suspend fun importKey(name: String, privateKeyContent: String, publicKeyContent: String?) = withContext(Dispatchers.IO) {
@@ -132,16 +160,18 @@ class KeyRepositoryImpl @Inject constructor(
         if (publicKeyContent != null) {
             File(keysDir, "$sanitizedName.pub").writeText(publicKeyContent)
         }
-        
+
+        keyMetadataStore.deleteByPath(privateKeyFile.absolutePath)
         refreshTrigger.emit(Unit)
     }
 
     override suspend fun deleteKey(key: SSHKey) = withContext(Dispatchers.IO) {
         File(key.path).delete()
         File(key.path + ".pub").delete()
+        keyMetadataStore.deleteByPath(key.path)
         refreshTrigger.emit(Unit)
     }
-    
+
     override fun getKeyPath(name: String): String {
         return File(keysDir, name).absolutePath
     }

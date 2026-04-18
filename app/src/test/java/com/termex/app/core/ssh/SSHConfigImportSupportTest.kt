@@ -1,7 +1,10 @@
 package com.termex.app.core.ssh
 
 import com.termex.app.core.ssh.SSHClient.Companion.shouldAddPasswordIdentity
+import com.termex.app.domain.PortForward
+import com.termex.app.domain.PortForwardType
 import com.termex.app.domain.Server
+import com.termex.app.domain.SSHCertificate
 import com.termex.app.domain.SSHKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -29,6 +32,69 @@ class SSHConfigImportSupportTest {
         assertEquals(true, hosts.first().identitiesOnly)
         assertEquals(true, hosts.first().forwardAgent)
         assertEquals("jump", hosts.first().proxyJump)
+    }
+
+    @Test
+    fun `parser keeps port forwards and server conversion preserves them`() {
+        val hosts = SSHConfigParser.parse(
+            """
+            Host prod
+                HostName prod.example.com
+                User deploy
+                LocalForward 8080 db.internal:5432
+                RemoteForward 0.0.0.0:9090 localhost:9091
+                DynamicForward 1080
+            """.trimIndent()
+        )
+
+        assertEquals(1, hosts.size)
+        assertEquals(3, hosts.first().portForwards.size)
+        assertEquals(
+            listOf(
+                PortForwardType.LOCAL,
+                PortForwardType.REMOTE,
+                PortForwardType.DYNAMIC
+            ),
+            hosts.first().portForwards.map { it.type }
+        )
+
+        val servers = SSHConfigParser.toServers(hosts)
+        assertEquals(1, servers.size)
+        assertEquals(hosts.first().portForwards, servers.first().portForwards)
+    }
+
+    @Test
+    fun `parser keeps certificate file and server conversion preserves it`() {
+        val hosts = SSHConfigParser.parse(
+            """
+            Host prod
+                HostName prod.example.com
+                User deploy
+                IdentityFile ~/.ssh/work
+                CertificateFile ~/.ssh/work-cert.pub
+            """.trimIndent()
+        )
+
+        assertEquals(1, hosts.size)
+        assertEquals("~/.ssh/work-cert.pub", hosts.first().certificateFile)
+
+        val servers = SSHConfigParser.toServers(hosts)
+        assertEquals(1, servers.size)
+        assertEquals("~/.ssh/work-cert.pub", servers.first().certificatePath)
+        assertEquals(com.termex.app.domain.AuthMode.KEY, servers.first().authMode)
+    }
+
+    @Test
+    fun `matching imported certificate path uses certificate basename`() {
+        val certificates = listOf(
+            SSHCertificate(name = "work-cert.pub", path = "/data/user/0/com.termex.app/files/certs/work-cert.pub"),
+            SSHCertificate(name = "personal-cert.pub", path = "/data/user/0/com.termex.app/files/certs/personal-cert.pub")
+        )
+
+        assertEquals(
+            "/data/user/0/com.termex.app/files/certs/work-cert.pub",
+            SSHConfigParser.findMatchingImportedCertificatePath("~/.ssh/work-cert.pub", certificates)
+        )
     }
 
     @Test
@@ -67,6 +133,35 @@ class SSHConfigImportSupportTest {
             "jump-1",
             SSHConfigParser.resolveJumpHostId("deploy@jump.example.com:2200", servers)
         )
+    }
+
+    @Test
+    fun `port forward codec round trips`() {
+        val encoded = SSHConfigParser.encodePortForwards(
+            listOf(
+                PortForward(
+                    type = PortForwardType.LOCAL,
+                    localPort = 8080,
+                    remoteHost = "db.internal",
+                    remotePort = 5432
+                ),
+                PortForward(
+                    type = PortForwardType.REMOTE,
+                    localPort = 9091,
+                    remoteHost = "localhost",
+                    remotePort = 9090,
+                    bindAddress = "0.0.0.0"
+                )
+            )
+        )
+
+        val decoded = SSHConfigParser.decodePortForwards(encoded)
+
+        assertEquals(2, decoded.size)
+        assertEquals(8080, decoded.first().localPort)
+        assertEquals("db.internal", decoded.first().remoteHost)
+        assertEquals(PortForwardType.REMOTE, decoded[1].type)
+        assertEquals("0.0.0.0", decoded[1].bindAddress)
     }
 
     @Test

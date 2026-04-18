@@ -2,9 +2,12 @@ package com.termex.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.termex.app.domain.CertificateRepository
 import com.termex.app.data.crypto.SecurePasswordStore
 import com.termex.app.domain.AuthMode
 import com.termex.app.domain.KeyRepository
+import com.termex.app.domain.PortForward
+import com.termex.app.domain.SSHCertificate
 import com.termex.app.domain.SSHKey
 import com.termex.app.domain.Server
 import com.termex.app.domain.ServerRepository
@@ -15,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
 
 data class ServerFormState(
@@ -28,16 +32,22 @@ data class ServerFormState(
     val hasStoredPassword: Boolean = false,
     val keyId: String? = null,
     val selectedKeyName: String? = null,
+    val certificatePath: String? = null,
+    val selectedCertificateName: String? = null,
     val jumpHostId: String? = null,
     val jumpHostName: String? = null,
     val forwardAgent: Boolean = false,
-    val identitiesOnly: Boolean = false
+    val identitiesOnly: Boolean = false,
+    val persistentSessionEnabled: Boolean = false,
+    val startupCommand: String = "",
+    val portForwards: List<PortForward> = emptyList()
 )
 
 @HiltViewModel
 class ServerSettingsViewModel @Inject constructor(
     private val serverRepository: ServerRepository,
     private val keyRepository: KeyRepository,
+    private val certificateRepository: CertificateRepository,
     private val passwordStore: SecurePasswordStore
 ) : ViewModel() {
 
@@ -50,6 +60,9 @@ class ServerSettingsViewModel @Inject constructor(
     val keys: StateFlow<List<SSHKey>> = keyRepository.getAllKeys()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
+    val certificates: StateFlow<List<SSHCertificate>> = certificateRepository.getAllCertificates()
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
     val servers: StateFlow<List<Server>> = serverRepository.getAllServers()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
@@ -59,6 +72,9 @@ class ServerSettingsViewModel @Inject constructor(
             val jumpHost = server.jumpHostId?.let { serverRepository.getServer(it) }
             val key = server.keyId?.let { keyId ->
                 keys.value.find { it.path == keyId }
+            }
+            val certificate = server.certificatePath?.let { certificatePath ->
+                certificates.value.find { it.path == certificatePath }
             }
             val resolvedPassword = passwordStore.resolvePassword(server.id, server.passwordKeychainID)
             if (resolvedPassword.keyId != null && resolvedPassword.keyId != server.passwordKeychainID) {
@@ -75,11 +91,16 @@ class ServerSettingsViewModel @Inject constructor(
                 password = "", // Don't load password for security
                 hasStoredPassword = resolvedPassword.password != null || !server.passwordKeychainID.isNullOrEmpty(),
                 keyId = server.keyId,
-                selectedKeyName = key?.name,
+                selectedKeyName = key?.name ?: server.keyId?.let { File(it).name },
+                certificatePath = server.certificatePath,
+                selectedCertificateName = certificate?.name ?: server.certificatePath?.let { File(it).name },
                 jumpHostId = server.jumpHostId,
                 jumpHostName = jumpHost?.displayName,
                 forwardAgent = server.forwardAgent,
-                identitiesOnly = server.identitiesOnly
+                identitiesOnly = server.identitiesOnly,
+                persistentSessionEnabled = server.persistentSessionEnabled,
+                startupCommand = server.startupCommand.orEmpty(),
+                portForwards = server.portForwards
             )
         }
     }
@@ -119,6 +140,13 @@ class ServerSettingsViewModel @Inject constructor(
         _formState.value = _formState.value.copy(keyId = keyId, selectedKeyName = keyName)
     }
 
+    fun updateSelectedCertificate(certificatePath: String?, certificateName: String?) {
+        _formState.value = _formState.value.copy(
+            certificatePath = certificatePath,
+            selectedCertificateName = certificateName
+        )
+    }
+
     fun updateJumpHost(jumpHostId: String?, jumpHostName: String?) {
         _formState.value = _formState.value.copy(jumpHostId = jumpHostId, jumpHostName = jumpHostName)
     }
@@ -129,6 +157,18 @@ class ServerSettingsViewModel @Inject constructor(
 
     fun updateIdentitiesOnly(identitiesOnly: Boolean) {
         _formState.value = _formState.value.copy(identitiesOnly = identitiesOnly)
+    }
+
+    fun updatePersistentSessionEnabled(enabled: Boolean) {
+        _formState.value = _formState.value.copy(persistentSessionEnabled = enabled)
+    }
+
+    fun updateStartupCommand(startupCommand: String) {
+        _formState.value = _formState.value.copy(startupCommand = startupCommand)
+    }
+
+    fun updatePortForwards(portForwards: List<PortForward>) {
+        _formState.value = _formState.value.copy(portForwards = portForwards)
     }
 
     fun triggerSave() {
@@ -161,9 +201,13 @@ class ServerSettingsViewModel @Inject constructor(
                 authMode = form.authMode,
                 passwordKeychainID = passwordToSave,
                 keyId = form.keyId,
+                certificatePath = form.certificatePath,
                 jumpHostId = form.jumpHostId,
                 forwardAgent = form.forwardAgent,
-                identitiesOnly = form.identitiesOnly
+                identitiesOnly = form.identitiesOnly,
+                persistentSessionEnabled = form.persistentSessionEnabled,
+                startupCommand = form.startupCommand.trim().ifBlank { null },
+                portForwards = form.portForwards
             )
 
             if (form.id != null) {

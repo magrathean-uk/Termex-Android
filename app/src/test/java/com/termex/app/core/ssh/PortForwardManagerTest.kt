@@ -32,7 +32,7 @@ class PortForwardManagerTest {
         val forward = PortForward(
             type = PortForwardType.REMOTE,
             localPort = 5432,
-            remoteHost = "localhost",
+            remoteHost = "db.internal",
             remotePort = 15432,
             bindAddress = "0.0.0.0"
         )
@@ -45,8 +45,36 @@ class PortForwardManagerTest {
         }
         assertEquals("0.0.0.0", remoteAddress.captured.hostName)
         assertEquals(15432, remoteAddress.captured.port)
-        assertEquals("127.0.0.1", localAddress.captured.hostName)
+        assertEquals("db.internal", localAddress.captured.hostName)
         assertEquals(5432, localAddress.captured.port)
+    }
+
+    @Test
+    fun `dynamic forward honors bind address`() {
+        val sshClient = mockk<SSHClient>()
+        val localAddress = slot<SshdSocketAddress>()
+
+        every {
+            sshClient.startDynamicPortForwarding(capture(localAddress))
+        } returns SshdSocketAddress("0.0.0.0", 1080)
+
+        val manager = PortForwardManager()
+        manager.setClient("server-a", sshClient)
+
+        val forward = PortForward(
+            type = PortForwardType.DYNAMIC,
+            localPort = 1080,
+            remoteHost = "localhost",
+            remotePort = 0,
+            bindAddress = "0.0.0.0"
+        )
+
+        manager.initializeForwards("server-a", listOf(forward))
+        manager.startForward("server-a", forward)
+
+        verify(exactly = 1) { sshClient.startDynamicPortForwarding(any()) }
+        assertEquals("0.0.0.0", localAddress.captured.hostName)
+        assertEquals(1080, localAddress.captured.port)
     }
 
     @Test

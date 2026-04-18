@@ -20,7 +20,7 @@ data class PortForward(
     val displayString: String
         get() = when (type) {
             PortForwardType.LOCAL -> "L:$localPort -> $remoteHost:$remotePort"
-            PortForwardType.REMOTE -> "R:$bindAddress:$remotePort -> localhost:$localPort"
+            PortForwardType.REMOTE -> "R:$bindAddress:$remotePort -> $remoteHost:$localPort"
             PortForwardType.DYNAMIC -> "D:$localPort (SOCKS)"
         }
 }

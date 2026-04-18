@@ -123,7 +123,7 @@ class TermexHostKeyVerifier @Inject constructor(
                 )
                 pendingVerification = result
                 verificationCallback?.onVerificationRequiredAsync(result)
-                true
+                false
             }
         }
     }

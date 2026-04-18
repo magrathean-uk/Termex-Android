@@ -2,6 +2,9 @@ package com.termex.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.termex.app.core.PersistedRootRoute
+import com.termex.app.core.RootRouteRestoreState
+import com.termex.app.core.resolveRootRoute
 import com.termex.app.core.billing.SubscriptionManager
 import com.termex.app.core.billing.SubscriptionState
 import com.termex.app.data.prefs.UserPreferencesRepository
@@ -14,6 +17,7 @@ import com.termex.app.domain.WorkplaceRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -34,6 +38,25 @@ class AppViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val subscriptionState: StateFlow<SubscriptionState> = subscriptionManager.subscriptionState
+
+    val startupRouteState: StateFlow<RootRouteRestoreState> = combine(
+        userPreferencesRepository.persistedRootRouteFlow,
+        userPreferencesRepository.persistentSessionResumeServerIdFlow,
+        serverRepository.getAllServers(),
+        workplaceRepository.getAllWorkplaces()
+    ) { persistedRoute, resumeServerId, servers, workplaces ->
+        val eligibleResumeServerIds = servers
+            .filter { it.persistentSessionEnabled }
+            .map { it.id }
+            .toSet()
+        resolveRootRoute(
+            persistedRoute = persistedRoute,
+            validServerIds = servers.map { it.id }.toSet(),
+            validWorkplaceIds = workplaces.map { it.id }.toSet(),
+            eligibleResumeServerIds = eligibleResumeServerIds,
+            resumeServerId = resumeServerId
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, RootRouteRestoreState())
     
     init {
         // Check subscription status on launch
@@ -70,6 +93,12 @@ class AppViewModel @Inject constructor(
 
     fun refreshSubscription() {
         subscriptionManager.querySubscriptionStatus()
+    }
+
+    fun saveRootRoute(route: PersistedRootRoute) {
+        viewModelScope.launch {
+            userPreferencesRepository.setPersistedRootRoute(route)
+        }
     }
     
     // Expose subscription methods

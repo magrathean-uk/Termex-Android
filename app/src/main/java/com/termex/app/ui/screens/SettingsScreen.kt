@@ -23,13 +23,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.termex.app.BuildConfig
 import com.termex.app.R
-import com.termex.app.core.security.BiometricAvailability
 import com.termex.app.data.prefs.KeepAliveInterval
+import com.termex.app.data.prefs.LinkHandlingMode
 import com.termex.app.data.prefs.ThemeMode
+import com.termex.app.ui.AutomationTags
 import com.termex.app.ui.theme.TerminalColorScheme
 import com.termex.app.ui.theme.TerminalFont
 import com.termex.app.ui.viewmodel.SettingsViewModel
@@ -40,18 +42,26 @@ fun SettingsScreen(
     onNavigateToKnownHosts: () -> Unit = {},
     onNavigateToSSHConfigBrowser: () -> Unit = {},
     onNavigateToDiagnostics: () -> Unit = {},
+    onNavigateToServerTransfer: () -> Unit = {},
+    onNavigateToBackupTransfer: () -> Unit = {},
+    onNavigateToExtraKeys: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val themeMode by viewModel.themeMode.collectAsState()
     val terminalSettings by viewModel.terminalSettings.collectAsState()
+    val terminalColorScheme by viewModel.terminalColorScheme.collectAsState()
     val keepAliveInterval by viewModel.keepAliveInterval.collectAsState()
     val demoModeEnabled by viewModel.demoModeEnabled.collectAsState()
     val biometricLockEnabled by viewModel.biometricLockEnabled.collectAsState()
+    val linkHandlingMode by viewModel.linkHandlingMode.collectAsState()
+    val terminalExtraKeys by viewModel.terminalExtraKeys.collectAsState()
     val diagnosticsSummary by viewModel.diagnosticsSummary.collectAsState()
-    val biometricAvailability = remember { viewModel.biometricAuthManager.isBiometricAvailable() }
+    val appLockState by viewModel.appLockState.collectAsState()
+    val biometricAvailability = appLockState.biometricAvailability
 
     var showKeepAliveMenu by remember { mutableStateOf(false) }
     var showColorSchemeMenu by remember { mutableStateOf(false) }
+    var showLinkMenu by remember { mutableStateOf(false) }
     var showFontMenu by remember { mutableStateOf(false) }
     var showFontSizeMenu by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
@@ -65,6 +75,7 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .testTag(AutomationTags.SETTINGS_SCREEN)
         ) {
             item {
                 ListItem(
@@ -82,31 +93,27 @@ fun SettingsScreen(
                 HorizontalDivider()
             }
 
-            if (biometricAvailability == BiometricAvailability.Available) {
-                item {
-                    ListItem(
-                        headlineContent = { Text(stringResource(R.string.settings_biometric_lock)) },
-                        supportingContent = {
-                            Text(
-                                if (biometricLockEnabled) {
-                                    stringResource(R.string.settings_biometric_lock_enabled_supporting)
-                                } else {
-                                    stringResource(R.string.settings_biometric_lock_disabled_supporting)
-                                }
-                            )
-                        },
-                        trailingContent = {
-                            Switch(
-                                checked = biometricLockEnabled,
-                                onCheckedChange = { viewModel.setBiometricLockEnabled(it) }
-                            )
-                        },
-                        modifier = Modifier.clickable {
-                            viewModel.setBiometricLockEnabled(!biometricLockEnabled)
-                        }
-                    )
-                    HorizontalDivider()
-                }
+            item {
+                val biometricToggleEnabled =
+                    biometricAvailability == com.termex.app.core.security.BiometricAvailability.Available ||
+                        biometricLockEnabled
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.settings_biometric_lock)) },
+                    supportingContent = {
+                        Text(viewModel.appLockCoordinator.settingsDescription(appLockState))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = biometricLockEnabled,
+                            onCheckedChange = { viewModel.setBiometricLockEnabled(it) },
+                            enabled = biometricToggleEnabled
+                        )
+                    },
+                    modifier = Modifier.clickable(enabled = biometricToggleEnabled) {
+                        viewModel.setBiometricLockEnabled(!biometricLockEnabled)
+                    }
+                )
+                HorizontalDivider()
             }
 
             item {
@@ -131,7 +138,7 @@ fun SettingsScreen(
                 Box {
                     ListItem(
                         headlineContent = { Text(stringResource(R.string.title_color_scheme)) },
-                        supportingContent = { Text(terminalSettings.colorScheme) },
+                        supportingContent = { Text(terminalColorScheme.displayName) },
                         modifier = Modifier.clickable { showColorSchemeMenu = true }
                     )
                     DropdownMenu(
@@ -142,13 +149,49 @@ fun SettingsScreen(
                             DropdownMenuItem(
                                 text = { Text(scheme.displayName) },
                                 onClick = {
-                                    viewModel.setColorScheme(scheme.displayName)
+                                    viewModel.setColorScheme(scheme)
                                     showColorSchemeMenu = false
                                 }
                             )
                         }
                     }
                 }
+                HorizontalDivider()
+            }
+
+            item {
+                Box {
+                    ListItem(
+                        headlineContent = { Text("Link handling") },
+                        supportingContent = { Text(linkHandlingMode.label) },
+                        modifier = Modifier.clickable { showLinkMenu = true }
+                    )
+                    DropdownMenu(
+                        expanded = showLinkMenu,
+                        onDismissRequest = { showLinkMenu = false }
+                    ) {
+                        LinkHandlingMode.entries.forEach { mode ->
+                            DropdownMenuItem(
+                                text = { Text(mode.label) },
+                                onClick = {
+                                    viewModel.setLinkHandlingMode(mode)
+                                    showLinkMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+                HorizontalDivider()
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text("Extra keys") },
+                    supportingContent = { Text("${terminalExtraKeys.size} enabled") },
+                    modifier = Modifier
+                        .clickable { onNavigateToExtraKeys() }
+                        .testTag(AutomationTags.SETTINGS_EXTRA_KEYS_ENTRY)
+                )
                 HorizontalDivider()
             }
 
@@ -232,6 +275,26 @@ fun SettingsScreen(
                     headlineContent = { Text(stringResource(R.string.diagnostics_title)) },
                     supportingContent = { Text(diagnosticsSummary) },
                     modifier = Modifier.clickable { onNavigateToDiagnostics() }
+                )
+                HorizontalDivider()
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.settings_backup_transfer)) },
+                    supportingContent = { Text(stringResource(R.string.settings_backup_transfer_supporting)) },
+                    modifier = Modifier
+                        .clickable { onNavigateToBackupTransfer() }
+                        .testTag(AutomationTags.SETTINGS_SYNC_ENTRY)
+                )
+                HorizontalDivider()
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.backup_transfer_archive_title)) },
+                    supportingContent = { Text(stringResource(R.string.backup_transfer_archive_supporting)) },
+                    modifier = Modifier.clickable { onNavigateToServerTransfer() }
                 )
                 HorizontalDivider()
             }

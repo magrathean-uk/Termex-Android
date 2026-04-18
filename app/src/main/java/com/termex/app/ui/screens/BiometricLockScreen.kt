@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -17,18 +19,24 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.termex.app.R
+import com.termex.app.ui.AutomationTags
 
 @Composable
 fun BiometricLockScreen(
     onAuthenticate: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    errorMessage: String? = null,
+    isAuthenticating: Boolean = false
 ) {
     Surface(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(AutomationTags.LOCK_SCREEN),
         color = MaterialTheme.colorScheme.background
     ) {
         Column(
@@ -61,14 +69,40 @@ fun BiometricLockScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
-            
-            Spacer(modifier = Modifier.height(32.dp))
-            
-            TextButton(onClick = onAuthenticate) {
-                Text(stringResource(R.string.biometric_unlock))
+
+            if (!errorMessage.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = errorMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.testTag(AutomationTags.LOCK_ERROR)
+                )
             }
-            
-            TextButton(onClick = onCancel) {
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Button(
+                onClick = onAuthenticate,
+                enabled = !isAuthenticating,
+                modifier = Modifier.testTag(AutomationTags.LOCK_UNLOCK)
+            ) {
+                if (isAuthenticating) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(stringResource(R.string.biometric_unlock))
+                }
+            }
+
+            TextButton(
+                onClick = onCancel,
+                enabled = !isAuthenticating,
+                modifier = Modifier.testTag(AutomationTags.LOCK_CANCEL)
+            ) {
                 Text(stringResource(R.string.biometric_exit))
             }
         }

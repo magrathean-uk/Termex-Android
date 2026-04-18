@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -26,6 +27,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.termex.app.R
+import com.termex.app.ui.AutomationTags
 import com.termex.app.ui.navigation.Route
 
 @Composable
@@ -51,6 +53,14 @@ fun MainTabs(
             NavigationBar {
                 tabs.forEachIndexed { index, tab ->
                     NavigationBarItem(
+                        modifier = Modifier.testTag(
+                            when (tab.route) {
+                                Route.Servers.route -> AutomationTags.MAIN_TAB_SERVERS
+                                Route.Keys.route -> AutomationTags.MAIN_TAB_KEYS
+                                Route.Settings.route -> AutomationTags.MAIN_TAB_SETTINGS
+                                else -> "main_tab_${tab.route}"
+                            }
+                        ),
                         icon = { Icon(tab.icon, contentDescription = tab.label) },
                         label = { Text(tab.label) },
                         selected = currentRoute == tab.route,
@@ -82,6 +92,9 @@ fun MainTabs(
                     },
                     onAddServer = {
                         rootNavController.navigate(Route.ServerSettings.createRoute(null))
+                    },
+                    onOpenSharedServers = {
+                        rootNavController.navigate(Route.SharedServers.route)
                     },
                     onEditServer = { server ->
                         rootNavController.navigate(Route.ServerSettings.createRoute(server.id))
@@ -129,6 +142,15 @@ fun MainTabs(
                     },
                     onNavigateToDiagnostics = {
                         rootNavController.navigate(Route.Diagnostics.route)
+                    },
+                    onNavigateToServerTransfer = {
+                        rootNavController.navigate(Route.ServerTransfer.route)
+                    },
+                    onNavigateToBackupTransfer = {
+                        rootNavController.navigate(Route.SyncSettings.route)
+                    },
+                    onNavigateToExtraKeys = {
+                        rootNavController.navigate(Route.ExtraKeysSettings.route)
                     }
                 )
             }

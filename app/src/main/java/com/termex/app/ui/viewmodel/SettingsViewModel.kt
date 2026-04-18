@@ -4,14 +4,22 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.termex.app.core.billing.SubscriptionManager
 import com.termex.app.core.billing.SubscriptionState
+import com.termex.app.core.security.AppLockCoordinator
+import com.termex.app.core.security.AppLockUiState
+import com.termex.app.core.security.BiometricAvailability
 import com.termex.app.data.diagnostics.DiagnosticsRepository
 import com.termex.app.data.prefs.KeepAliveInterval
+import com.termex.app.data.prefs.LinkHandlingMode
+import com.termex.app.data.prefs.TerminalExtraKey
+import com.termex.app.data.prefs.TerminalExtraKeyPreset
 import com.termex.app.data.prefs.TerminalSettings
 import com.termex.app.data.prefs.ThemeMode
 import com.termex.app.data.prefs.UserPreferencesRepository
+import com.termex.app.ui.theme.TerminalColorScheme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,7 +31,7 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val subscriptionManager: SubscriptionManager,
-    val biometricAuthManager: com.termex.app.core.security.BiometricAuthManager,
+    val appLockCoordinator: AppLockCoordinator,
     private val sessionRepository: com.termex.app.data.repository.SessionRepository,
     private val diagnosticsRepository: DiagnosticsRepository
 ) : ViewModel() {
@@ -34,6 +42,10 @@ class SettingsViewModel @Inject constructor(
     val terminalSettings: StateFlow<TerminalSettings> = userPreferencesRepository.terminalSettingsFlow
         .stateIn(viewModelScope, SharingStarted.Lazily, TerminalSettings())
 
+    val terminalColorScheme: StateFlow<TerminalColorScheme> = userPreferencesRepository.terminalSettingsFlow
+        .map { TerminalColorScheme.fromStoredValue(it.colorScheme) }
+        .stateIn(viewModelScope, SharingStarted.Lazily, TerminalColorScheme.WHITE_ON_BLACK)
+
     val keepAliveInterval: StateFlow<KeepAliveInterval> = userPreferencesRepository.keepAliveIntervalFlow
         .stateIn(viewModelScope, SharingStarted.Lazily, KeepAliveInterval.SECONDS_30)
 
@@ -42,6 +54,17 @@ class SettingsViewModel @Inject constructor(
 
     val biometricLockEnabled: StateFlow<Boolean> = userPreferencesRepository.biometricLockEnabledFlow
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    val linkHandlingMode: StateFlow<LinkHandlingMode> = userPreferencesRepository.linkHandlingModeFlow
+        .stateIn(viewModelScope, SharingStarted.Lazily, LinkHandlingMode.AUTOMATIC)
+
+    val terminalExtraKeyPreset: StateFlow<TerminalExtraKeyPreset> = userPreferencesRepository.terminalExtraKeyPresetFlow
+        .stateIn(viewModelScope, SharingStarted.Lazily, TerminalExtraKeyPreset.STANDARD)
+
+    val terminalExtraKeys: StateFlow<List<TerminalExtraKey>> = userPreferencesRepository.terminalExtraKeysFlow
+        .stateIn(viewModelScope, SharingStarted.Lazily, TerminalExtraKey.defaultKeys)
+
+    val appLockState: StateFlow<AppLockUiState> = appLockCoordinator.uiState
 
     val subscriptionState: StateFlow<SubscriptionState> = subscriptionManager.subscriptionState
 
@@ -99,10 +122,28 @@ class SettingsViewModel @Inject constructor(
         }
     }
     
-    fun setColorScheme(scheme: String) {
+    fun setColorScheme(scheme: TerminalColorScheme) {
         viewModelScope.launch {
             val current = terminalSettings.value
-            userPreferencesRepository.setTerminalSettings(current.copy(colorScheme = scheme))
+            userPreferencesRepository.setTerminalSettings(current.copy(colorScheme = scheme.raw))
+        }
+    }
+
+    fun setLinkHandlingMode(mode: LinkHandlingMode) {
+        viewModelScope.launch {
+            userPreferencesRepository.setLinkHandlingMode(mode)
+        }
+    }
+
+    fun setTerminalExtraKeyPreset(preset: TerminalExtraKeyPreset) {
+        viewModelScope.launch {
+            userPreferencesRepository.setTerminalExtraKeyPreset(preset)
+        }
+    }
+
+    fun setTerminalExtraKeyIds(keyIds: List<String>) {
+        viewModelScope.launch {
+            userPreferencesRepository.setTerminalExtraKeyIds(keyIds)
         }
     }
     
@@ -114,12 +155,19 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             userPreferencesRepository.resetOnboarding()
             userPreferencesRepository.setDemoModeEnabled(false)
+            userPreferencesRepository.setBiometricLockEnabled(false)
             sessionRepository.deleteAllSessions()
         }
     }
 
     fun setBiometricLockEnabled(enabled: Boolean) {
         viewModelScope.launch {
+            if (enabled) {
+                appLockCoordinator.refreshAvailability()
+                if (appLockCoordinator.uiState.value.biometricAvailability != BiometricAvailability.Available) {
+                    return@launch
+                }
+            }
             userPreferencesRepository.setBiometricLockEnabled(enabled)
         }
     }

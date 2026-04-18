@@ -21,12 +21,15 @@ data class ServerEntity(
     val authMode: AuthMode,
     val passwordKeychainID: String?,
     val keyId: String?,
+    @ColumnInfo(defaultValue = "NULL") val certificatePath: String? = null,
     val workplaceId: String?,
     val portForwardsData: String? = null,
     val jumpHostId: String? = null,
     val forwardAgent: Boolean = false,
     val isDemo: Boolean = false,
-    @ColumnInfo(defaultValue = "0") val identitiesOnly: Boolean = false
+    @ColumnInfo(defaultValue = "0") val identitiesOnly: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val persistentSessionEnabled: Boolean = false,
+    @ColumnInfo(defaultValue = "NULL") val startupCommand: String? = null
 )
 
 fun ServerEntity.toDomain(): Server {
@@ -40,12 +43,15 @@ fun ServerEntity.toDomain(): Server {
         authMode = authMode,
         passwordKeychainID = passwordKeychainID,
         keyId = keyId,
+        certificatePath = certificatePath,
         workplaceId = workplaceId,
         portForwards = portForwards,
         jumpHostId = jumpHostId,
         forwardAgent = forwardAgent,
         isDemo = isDemo,
-        identitiesOnly = identitiesOnly
+        identitiesOnly = identitiesOnly,
+        persistentSessionEnabled = persistentSessionEnabled,
+        startupCommand = startupCommand
     )
 }
 
@@ -60,11 +66,14 @@ fun Server.toEntity(): ServerEntity {
         authMode = authMode,
         passwordKeychainID = passwordKeychainID,
         keyId = keyId,
+        certificatePath = certificatePath,
         workplaceId = workplaceId,
         portForwardsData = portForwardsJson,
         jumpHostId = jumpHostId,
         forwardAgent = forwardAgent,
         isDemo = isDemo,
-        identitiesOnly = identitiesOnly
+        identitiesOnly = identitiesOnly,
+        persistentSessionEnabled = persistentSessionEnabled,
+        startupCommand = startupCommand
     )
 }

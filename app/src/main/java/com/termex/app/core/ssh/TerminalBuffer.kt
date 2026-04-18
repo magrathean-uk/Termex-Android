@@ -95,7 +95,6 @@ class TerminalBuffer(
                 }
             }
 
-            _cursorPosition.value = Pair(cursorX, cursorY - viewportStart)
             emitContentLocked()
         }
     }
@@ -104,6 +103,7 @@ class TerminalBuffer(
         for (char in segment.text) {
             when (char) {
                 '\n' -> {
+                    cursorX = 0
                     lineFeedLocked()
                 }
                 '\r' -> {
@@ -301,14 +301,14 @@ class TerminalBuffer(
     
     private fun lineFeedLocked() {
         cursorY++
-        ensureLineExistsLocked(cursorY)
-        
+
         // Check if cursor went below scroll region
         val absBottom = viewportStart + scrollBottom
         if (cursorY > absBottom) {
-            cursorY = absBottom
             scrollUpRegion(1)
+            cursorY = viewportStart + scrollBottom
         }
+        ensureLineExistsLocked(cursorY)
     }
     
     private fun reverseIndexLocked() {
@@ -502,7 +502,7 @@ class TerminalBuffer(
         val actualStart = maxOf(viewportStart - scrollOffset, 0)
         val endIndex = minOf(lines.size, actualStart + rows)
         val safeStart = minOf(actualStart, lines.size)
-        
+
         _contentFlow.value = if (safeStart < endIndex) {
             lines.subList(safeStart, endIndex).map { line ->
                 TerminalLine(ArrayList(line.cells))
@@ -510,6 +510,7 @@ class TerminalBuffer(
         } else {
             emptyList()
         }
+        _cursorPosition.value = Pair(cursorX, cursorY - actualStart)
     }
     
     fun scrollUp(amount: Int = 1) {
@@ -556,6 +557,9 @@ class TerminalBuffer(
     fun resize(newCols: Int, newRows: Int) {
         if (newCols <= 0 || newRows <= 0) return
         synchronized(lock) {
+            val visibleStartBefore = maxOf(viewportStart - scrollOffset, 0)
+            val wasScrolledUp = scrollOffset > 0
+
             cols = newCols
             rows = newRows
             scrollBottom = rows - 1
@@ -570,11 +574,17 @@ class TerminalBuffer(
             }
 
             trimScrollback()
+            ensureLineExistsLocked(rows - 1)
 
+            viewportStart = maxOf(0, lines.size - rows)
             cursorX = cursorX.coerceIn(0, cols - 1)
-            cursorY = cursorY.coerceIn(viewportStart, maxOf(viewportStart, lines.size - 1))
+            cursorY = cursorY.coerceIn(0, maxOf(0, lines.size - 1))
             val maxOffset = maxOf(0, viewportStart)
-            scrollOffset = scrollOffset.coerceIn(0, maxOffset)
+            scrollOffset = if (wasScrolledUp) {
+                (viewportStart - visibleStartBefore).coerceIn(0, maxOffset)
+            } else {
+                0
+            }
             emitContentLocked()
         }
     }
@@ -584,4 +594,24 @@ class TerminalBuffer(
             line.cells.map { it.char }.joinToString("")
         }
     }
+
+    fun slice(startIndex: Int, endIndex: Int): List<TerminalLine> {
+        synchronized(lock) {
+            val content = _contentFlow.value
+            val start = startIndex.coerceAtLeast(0).coerceAtMost(content.size)
+            val end = endIndex.coerceAtLeast(start).coerceAtMost(content.size)
+            return content.subList(start, end).map { line -> cloneLine(line) }
+        }
+    }
+
+    fun slice(lineCount: Int): List<TerminalLine> {
+        synchronized(lock) {
+            val content = _contentFlow.value
+            if (lineCount <= 0) return emptyList()
+            val start = maxOf(0, content.size - lineCount)
+            return content.subList(start, content.size).map { line -> cloneLine(line) }
+        }
+    }
+
+    private fun cloneLine(line: TerminalLine): TerminalLine = TerminalLine(ArrayList(line.cells))
 }

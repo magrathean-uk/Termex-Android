@@ -15,12 +15,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,6 +46,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -56,8 +61,10 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.nativeKeyCode
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
@@ -65,13 +72,21 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.termex.app.R
+import com.termex.app.data.prefs.LinkHandlingMode
 import com.termex.app.core.ssh.SSHConnectionState
+import com.termex.app.ui.AutomationTags
 import com.termex.app.ui.components.ConnectionReportSheet
 import com.termex.app.ui.components.HostKeyVerificationDialog
 import com.termex.app.ui.components.PasswordDialog
-import com.termex.app.ui.components.TerminalKeyboard
+import com.termex.app.ui.components.TerminalExtraKeyBar
+import com.termex.app.ui.components.TerminalLinkAction
+import com.termex.app.ui.components.TerminalTranscriptToolsSheet
+import com.termex.app.ui.components.extractTerminalLinks
+import com.termex.app.ui.components.linkActionFor
+import com.termex.app.ui.components.stitchTranscript
 import com.termex.app.ui.components.TerminalView
 import com.termex.app.ui.theme.TerminalColorScheme
+import com.termex.app.ui.viewmodel.SettingsViewModel
 import com.termex.app.ui.viewmodel.TerminalViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -80,7 +95,8 @@ fun TerminalScreen(
     serverId: String,
     onNavigateBack: () -> Unit,
     onNavigateToPortForwarding: ((String) -> Unit)? = null,
-    viewModel: TerminalViewModel = hiltViewModel()
+    viewModel: TerminalViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
     val connectionState by viewModel.connectionState.collectAsState()
     val currentServer by viewModel.currentServer.collectAsState()
@@ -91,8 +107,12 @@ fun TerminalScreen(
     val showSnippetPicker by viewModel.showSnippetPicker.collectAsState()
     val snippets by viewModel.snippets.collectAsState()
     val terminalSettings by viewModel.terminalSettings.collectAsState()
+    val terminalColorScheme by settingsViewModel.terminalColorScheme.collectAsState()
+    val linkHandlingMode by settingsViewModel.linkHandlingMode.collectAsState()
+    val extraKeys by settingsViewModel.terminalExtraKeys.collectAsState()
     val recentDiagnosticEvents by viewModel.recentDiagnosticEvents.collectAsState()
-    val colorScheme = TerminalColorScheme.fromName(terminalSettings.colorScheme)
+    val colorScheme = terminalColorScheme
+    val context = LocalContext.current
 
     var ctrlActive by remember { mutableStateOf(false) }
     var altActive by remember { mutableStateOf(false) }
@@ -101,9 +121,24 @@ fun TerminalScreen(
     val focusRequester = remember { FocusRequester() }
     val snippetSheetState = rememberModalBottomSheetState()
     var showConnectionReport by remember { mutableStateOf(false) }
+    var showTranscriptTools by remember { mutableStateOf(false) }
+    var pendingLink by remember { mutableStateOf<String?>(null) }
+    val transcriptLines = remember(serverId) { mutableStateListOf<String>() }
 
     LaunchedEffect(serverId) {
+        transcriptLines.clear()
         viewModel.connect(serverId)
+    }
+
+    LaunchedEffect(lines) {
+        val visible = lines.map { line ->
+            line.cells.joinToString(separator = "") { cell -> cell.char.toString() }.trimEnd()
+        }
+        if (visible.isNotEmpty()) {
+            val stitched = stitchTranscript(transcriptLines.toList(), visible)
+            transcriptLines.clear()
+            transcriptLines.addAll(stitched.takeLast(4000))
+        }
     }
 
     // Silently focus the hidden text field when connected so input is routed correctly.
@@ -148,6 +183,50 @@ fun TerminalScreen(
             connectionState = connectionState,
             events = recentDiagnosticEvents,
             onDismiss = { showConnectionReport = false }
+        )
+    }
+
+    if (showTranscriptTools) {
+        TerminalTranscriptToolsSheet(
+            transcriptLines = transcriptLines.toList(),
+            linkHandlingMode = linkHandlingMode,
+            onJumpToLine = { lineIndex ->
+                viewModel.scrollTerminal(Int.MAX_VALUE)
+                viewModel.scrollTerminal(-lineIndex)
+                showTranscriptTools = false
+            },
+            onOpenLink = { link ->
+                when (linkActionFor(link, linkHandlingMode)) {
+                    TerminalLinkAction.IGNORE -> Unit
+                    TerminalLinkAction.OPEN -> openTerminalLink(context, link)
+                    TerminalLinkAction.CONFIRM -> pendingLink = link
+                }
+            },
+            onExportTranscript = {
+                exportTranscript(context, currentServer?.displayName ?: "Terminal", transcriptLines.toList())
+            },
+            onDismiss = { showTranscriptTools = false }
+        )
+    }
+
+    pendingLink?.let { link ->
+        AlertDialog(
+            onDismissRequest = { pendingLink = null },
+            title = { Text("Open link?") },
+            text = { Text(link) },
+            confirmButton = {
+                TextButton(onClick = {
+                    openTerminalLink(context, link)
+                    pendingLink = null
+                }) {
+                    Text("Open")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingLink = null }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 
@@ -222,14 +301,16 @@ fun TerminalScreen(
                                 is SSHConnectionState.Disconnected -> stringResource(R.string.terminal_disconnected)
                             },
                             style = MaterialTheme.typography.titleMedium,
-                            color = Color.White
+                            color = Color.White,
+                            modifier = Modifier.testTag(AutomationTags.TERMINAL_TITLE)
                         )
                         if (connectionState is SSHConnectionState.Connected) {
                             currentServer?.let { server ->
                                 Text(
                                     text = "${server.username}@${server.hostname}:${server.port}",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF98989D)
+                                    color = Color(0xFF98989D),
+                                    modifier = Modifier.testTag(AutomationTags.TERMINAL_CONNECTION_LABEL)
                                 )
                             }
                         }
@@ -246,6 +327,13 @@ fun TerminalScreen(
                 },
                 actions = {
                     if (connectionState is SSHConnectionState.Connected) {
+                        IconButton(onClick = { showTranscriptTools = true }) {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = "Transcript tools",
+                                tint = Color(0xFF98989D)
+                            )
+                        }
                         IconButton(onClick = { showConnectionReport = true }) {
                             Icon(
                                 Icons.Default.Info,
@@ -275,10 +363,13 @@ fun TerminalScreen(
                                 }
                             }
                         }
-                        IconButton(onClick = {
-                            viewModel.disconnect()
-                            onNavigateBack()
-                        }) {
+                        IconButton(
+                            modifier = Modifier.testTag(AutomationTags.TERMINAL_DISCONNECT),
+                            onClick = {
+                                viewModel.disconnect()
+                                onNavigateBack()
+                            }
+                        ) {
                             Icon(
                                 Icons.Default.Close,
                                 contentDescription = "Disconnect",
@@ -367,7 +458,8 @@ fun TerminalScreen(
                         cursorPosition = cursorPosition,
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxWidth(),
+                            .fillMaxWidth()
+                            .testTag(AutomationTags.TERMINAL_VIEW),
                         fontSize = terminalSettings.fontSize.toFloat(),
                         backgroundColor = colorScheme.background,
                         foregroundColor = colorScheme.foreground,
@@ -382,8 +474,9 @@ fun TerminalScreen(
                         }
                     )
 
-                    // Extended keyboard bar
-                    TerminalKeyboard(
+                    TerminalExtraKeyBar(
+                        keys = extraKeys,
+                        theme = colorScheme,
                         ctrlActive = ctrlActive,
                         altActive = altActive,
                         onCtrlToggle = { ctrlActive = !ctrlActive },
@@ -413,6 +506,7 @@ fun TerminalScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(1.dp)
+                            .testTag(AutomationTags.TERMINAL_INPUT)
                             .focusRequester(focusRequester)
                             .onPreviewKeyEvent { keyEvent ->
                                 if (keyEvent.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -490,4 +584,27 @@ fun TerminalScreen(
             }
         }
     }
+}
+
+private fun openTerminalLink(context: android.content.Context, link: String) {
+    runCatching {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse(link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    }
+}
+
+private fun exportTranscript(
+    context: android.content.Context,
+    serverName: String,
+    transcriptLines: List<String>
+) {
+    val transcriptText = transcriptLines.joinToString("\n").trim()
+    if (transcriptText.isBlank()) return
+    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, "$serverName transcript")
+        putExtra(Intent.EXTRA_TEXT, transcriptText)
+    }
+    context.startActivity(Intent.createChooser(shareIntent, "Export transcript").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }

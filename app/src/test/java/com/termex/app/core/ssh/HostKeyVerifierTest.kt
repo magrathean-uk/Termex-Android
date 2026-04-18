@@ -52,6 +52,30 @@ class HostKeyVerifierTest {
     }
 
     @Test
+    fun `unknown host key is rejected until user explicitly trusts it`() = runBlocking {
+        val repo = InMemoryKnownHostRepository()
+        val verifier = TermexHostKeyVerifier(repo)
+        verifier.setTarget("new.example.com", 22)
+
+        var callbackResult: HostKeyVerificationResult? = null
+        verifier.setCallback(object : HostKeyVerificationCallback {
+            override fun onVerificationRequiredAsync(result: HostKeyVerificationResult) {
+                callbackResult = result
+            }
+        })
+
+        val allowed = verifier.verifyServerKey(
+            clientSession = mockk(relaxed = true),
+            remoteAddress = null,
+            serverKey = generatePublicKey()
+        )
+
+        assertFalse(allowed)
+        assertTrue(callbackResult is HostKeyVerificationResult.Unknown)
+        assertTrue(verifier.getPendingVerification() is HostKeyVerificationResult.Unknown)
+    }
+
+    @Test
     fun `matching known host key is accepted without callback`() = runBlocking {
         val key = generatePublicKey()
         val fingerprint = KeyUtils.calculateFingerprint(key)

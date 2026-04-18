@@ -68,8 +68,8 @@ class DiagnosticsRepository @Inject constructor(
     ) {
         val event = DiagnosticEvent(
             category = category.trim().ifBlank { "general" },
-            title = title.trim().ifBlank { "Event" },
-            detail = detail?.trim()?.takeIf { it.isNotEmpty() }?.take(MAX_DETAIL_LENGTH),
+            title = DiagnosticsRedactor.redact(title)?.trim().orEmpty().ifBlank { "Event" },
+            detail = DiagnosticsRedactor.redact(detail)?.trim()?.takeIf { it.isNotEmpty() }?.take(MAX_DETAIL_LENGTH),
             serverId = serverId?.takeIf { it.isNotBlank() },
             severity = severity
         )
@@ -107,8 +107,8 @@ class DiagnosticsRepository @Inject constructor(
                             id = obj.optString("id", UUID.randomUUID().toString()),
                             timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
                             category = obj.optString("category", "general"),
-                            title = obj.optString("title", "Event"),
-                            detail = obj.optString("detail").takeIf { it.isNotBlank() },
+                            title = DiagnosticsRedactor.redact(obj.optString("title", "Event")) ?: "Event",
+                            detail = DiagnosticsRedactor.redact(obj.optString("detail")).takeIf { !it.isNullOrBlank() },
                             serverId = obj.optString("serverId").takeIf { it.isNotBlank() },
                             severity = runCatching {
                                 DiagnosticSeverity.valueOf(obj.optString("severity", DiagnosticSeverity.INFO.name))

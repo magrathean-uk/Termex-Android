@@ -1,8 +1,10 @@
 package com.termex.app.ui.viewmodel
 
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.termex.app.core.PersistedRootRoute
 import com.termex.app.core.ssh.ConnectionManager
 import com.termex.app.core.ssh.HostKeyVerificationCallback
 import com.termex.app.core.ssh.HostKeyVerificationResult
@@ -10,13 +12,19 @@ import com.termex.app.core.ssh.SSHConnectionConfig
 import com.termex.app.core.ssh.SSHConnectionState
 import com.termex.app.core.ssh.SshConfigBuilder
 import com.termex.app.core.ssh.TerminalBuffer
+import com.termex.app.core.ssh.hasCredentials
+import com.termex.app.data.prefs.UserPreferencesRepository
 import com.termex.app.domain.Server
+import com.termex.app.domain.ServerRepository
 import com.termex.app.domain.WorkplaceRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
@@ -39,13 +47,41 @@ data class HostKeyPrompt(
 class MultiTerminalViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val workplaceRepository: WorkplaceRepository,
+    private val serverRepository: ServerRepository,
+    private val userPreferencesRepository: UserPreferencesRepository,
     private val connectionManager: ConnectionManager,
     private val sshConfigBuilder: SshConfigBuilder
 ) : ViewModel() {
 
     private val workplaceId: String = savedStateHandle.get<String>("workplaceId") ?: ""
+    private val workspaceServerIds: List<String> = savedStateHandle.get<String>("serverIds")
+        ?.let(Uri::decode)
+        ?.split(",")
+        ?.map { it.trim() }
+        ?.filter { it.isNotEmpty() }
+        .orEmpty()
 
-    val servers: StateFlow<List<Server>> = workplaceRepository.getServersForWorkplace(workplaceId)
+    private sealed interface RouteMode {
+        data object None : RouteMode
+        data class Workplace(val workplaceId: String) : RouteMode
+        data class Workspace(val serverIds: List<String>) : RouteMode
+    }
+
+    private val routeMode: RouteMode = when {
+        workplaceId.isNotBlank() -> RouteMode.Workplace(workplaceId)
+        workspaceServerIds.isNotEmpty() -> RouteMode.Workspace(workspaceServerIds)
+        else -> RouteMode.None
+    }
+
+    val servers: StateFlow<List<Server>> = when (val mode = routeMode) {
+        is RouteMode.Workplace -> workplaceRepository.getServersForWorkplace(mode.workplaceId)
+        is RouteMode.Workspace -> serverRepository.getAllServers().map { allServers ->
+            mode.serverIds.mapNotNull { serverId ->
+                allServers.firstOrNull { it.id == serverId }
+            }
+        }
+        RouteMode.None -> flowOf(emptyList())
+    }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     private val _paneStates = MutableStateFlow<Map<String, TerminalPaneState>>(emptyMap())
@@ -61,6 +97,28 @@ class MultiTerminalViewModel @Inject constructor(
 
     private val _hostKeyPrompt = MutableStateFlow<HostKeyPrompt?>(null)
     val hostKeyPrompt: StateFlow<HostKeyPrompt?> = _hostKeyPrompt.asStateFlow()
+
+    init {
+        when (val mode = routeMode) {
+            is RouteMode.Workplace -> {
+                viewModelScope.launch {
+                    userPreferencesRepository.setPersistedRootRoute(
+                        PersistedRootRoute.workplace(mode.workplaceId)
+                    )
+                }
+            }
+
+            is RouteMode.Workspace -> {
+                viewModelScope.launch {
+                    userPreferencesRepository.setPersistedRootRoute(
+                        PersistedRootRoute.workspace(mode.serverIds)
+                    )
+                }
+            }
+
+            RouteMode.None -> Unit
+        }
+    }
 
     fun selectPane(serverId: String) {
         _selectedPane.value = serverId
@@ -89,7 +147,7 @@ class MultiTerminalViewModel @Inject constructor(
             }
 
             val config = sshConfigBuilder.buildConfig(server, password)
-            if (config == null || (config.password == null && config.privateKey == null)) {
+            if (config == null || !config.hasCredentials()) {
                 updatePaneState(server.id) {
                     it.copy(connectionState = SSHConnectionState.Error("Missing credentials"))
                 }
@@ -102,7 +160,8 @@ class MultiTerminalViewModel @Inject constructor(
                 updatePaneState(server.id) { it.copy(connectionState = SSHConnectionState.Connected) }
                 observePane(server.id)
             } else if (_hostKeyPrompt.value?.serverId != server.id ||
-                _hostKeyPrompt.value?.result !is HostKeyVerificationResult.Changed
+                (_hostKeyPrompt.value?.result !is HostKeyVerificationResult.Changed &&
+                    _hostKeyPrompt.value?.result !is HostKeyVerificationResult.Unknown)
             ) {
                 updatePaneState(server.id) {
                     it.copy(connectionState = SSHConnectionState.Error(
@@ -164,7 +223,7 @@ class MultiTerminalViewModel @Inject constructor(
         val prompt = _hostKeyPrompt.value ?: return
         viewModelScope.launch {
             connectionManager.trustHostKey(prompt.result)
-            if (prompt.result is HostKeyVerificationResult.Changed) {
+            if (prompt.result is HostKeyVerificationResult.Unknown || prompt.result is HostKeyVerificationResult.Changed) {
                 val server = servers.value.firstOrNull { it.id == prompt.serverId }
                 val config = pendingConfigs[prompt.serverId]
                 advancePrompt()
@@ -202,8 +261,41 @@ class MultiTerminalViewModel @Inject constructor(
     }
 
     fun initializePanes(servers: List<Server>) {
-        _paneStates.value = servers.associate { server ->
-            server.id to TerminalPaneState(server = server)
+        val current = _paneStates.value.toMutableMap()
+        val nextIds = servers.mapTo(mutableSetOf()) { it.id }
+        current.keys.removeAll { it !in nextIds }
+        servers.forEach { server ->
+            current[server.id] = current[server.id]?.copy(server = server)
+                ?: TerminalPaneState(server = server)
+        }
+        _paneStates.value = current
+        if (_selectedPane.value !in nextIds) {
+            _selectedPane.value = servers.firstOrNull()?.id
+        }
+    }
+
+    fun syncPersistedRoute() {
+        viewModelScope.launch {
+            when (val mode = routeMode) {
+                is RouteMode.Workplace -> {
+                    userPreferencesRepository.setPersistedRootRoute(
+                        PersistedRootRoute.workplace(mode.workplaceId)
+                    )
+                }
+
+                is RouteMode.Workspace -> {
+                    val currentIds = servers.value.map { it.id }
+                    userPreferencesRepository.setPersistedRootRoute(
+                        if (currentIds.isEmpty()) {
+                            PersistedRootRoute.none()
+                        } else {
+                            PersistedRootRoute.workspace(currentIds)
+                        }
+                    )
+                }
+
+                RouteMode.None -> Unit
+            }
         }
     }
 

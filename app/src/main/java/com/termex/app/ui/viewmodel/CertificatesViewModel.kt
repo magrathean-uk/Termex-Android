@@ -2,8 +2,10 @@ package com.termex.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.termex.app.domain.AuthMode
 import com.termex.app.domain.CertificateRepository
 import com.termex.app.domain.SSHCertificate
+import com.termex.app.domain.ServerRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -15,7 +17,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class CertificatesViewModel @Inject constructor(
-    private val certificateRepository: CertificateRepository
+    private val certificateRepository: CertificateRepository,
+    private val serverRepository: ServerRepository
 ) : ViewModel() {
 
     val certificates: StateFlow<List<SSHCertificate>> = certificateRepository.getAllCertificates()
@@ -37,6 +40,44 @@ class CertificatesViewModel @Inject constructor(
     fun deleteCertificate(certificate: SSHCertificate) {
         viewModelScope.launch {
             certificateRepository.deleteCertificate(certificate)
+        }
+    }
+
+    fun repairServerWithSelectedCertificate(
+        serverId: String,
+        certificate: SSHCertificate,
+        onComplete: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val server = serverRepository.getServer(serverId) ?: return@launch
+            serverRepository.updateServer(
+                server.copy(
+                    authMode = AuthMode.KEY,
+                    certificatePath = certificate.path
+                )
+            )
+            onComplete()
+        }
+    }
+
+    fun importCertificateForServer(
+        serverId: String,
+        name: String,
+        content: String,
+        onComplete: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val sanitizedName = name.trim()
+            certificateRepository.importCertificate(sanitizedName, content.trim())
+            val server = serverRepository.getServer(serverId) ?: return@launch
+            serverRepository.updateServer(
+                server.copy(
+                    authMode = AuthMode.KEY,
+                    certificatePath = certificateRepository.getCertificatePath(sanitizedName)
+                )
+            )
+            hideImportDialog()
+            onComplete()
         }
     }
 }

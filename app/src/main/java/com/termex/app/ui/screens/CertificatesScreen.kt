@@ -1,8 +1,8 @@
 package com.termex.app.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,37 +36,54 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.termex.app.R
 import com.termex.app.domain.SSHCertificate
+import com.termex.app.ui.AutomationTags
 import com.termex.app.ui.viewmodel.CertificatesViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CertificatesScreen(
-    onNavigateBack: () -> Unit,
+    onNavigateBack: (() -> Unit)? = null,
+    repairTargetServerId: String? = null,
+    autoOpenImportDialog: Boolean = false,
     viewModel: CertificatesViewModel = hiltViewModel()
 ) {
     val certificates by viewModel.certificates.collectAsState()
     val showImport by viewModel.showImportDialog.collectAsState()
     var certToDelete by remember { mutableStateOf<SSHCertificate?>(null) }
+    var importAutoOpened by remember { mutableStateOf(false) }
+
+    LaunchedEffect(autoOpenImportDialog) {
+        if (autoOpenImportDialog && !importAutoOpened) {
+            importAutoOpened = true
+            viewModel.showImportDialog()
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.certificates_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    onNavigateBack?.let { back ->
+                        IconButton(onClick = back) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
                     }
                 }
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { viewModel.showImportDialog() }) {
+            FloatingActionButton(
+                modifier = Modifier.testTag(AutomationTags.CERTIFICATES_ADD),
+                onClick = { viewModel.showImportDialog() }
+            ) {
                 Icon(Icons.Default.Add, contentDescription = "Import Certificate")
             }
         }
@@ -116,7 +134,6 @@ fun CertificatesScreen(
                             }
                         },
                         leadingContent = {
-                            // Validity badge
                             FilterChip(
                                 selected = cert.isValid,
                                 onClick = {},
@@ -136,6 +153,18 @@ fun CertificatesScreen(
                                     tint = MaterialTheme.colorScheme.error
                                 )
                             }
+                        },
+                        modifier = if (repairTargetServerId != null) {
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.repairServerWithSelectedCertificate(repairTargetServerId, cert) {
+                                        onNavigateBack?.invoke()
+                                    }
+                                }
+                                .testTag("repair_certificate_${cert.id}")
+                        } else {
+                            Modifier
                         }
                     )
                     HorizontalDivider()
@@ -158,7 +187,9 @@ fun CertificatesScreen(
                         onValueChange = { name = it },
                         label = { Text(stringResource(R.string.certificates_label_name)) },
                         placeholder = { Text(stringResource(R.string.certificates_placeholder_name)) },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag(AutomationTags.CERTIFICATE_IMPORT_NAME),
                         singleLine = true
                     )
                     OutlinedTextField(
@@ -168,14 +199,27 @@ fun CertificatesScreen(
                         placeholder = { Text(stringResource(R.string.certificates_placeholder_content)) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp),
+                            .padding(top = 8.dp)
+                            .testTag(AutomationTags.CERTIFICATE_IMPORT_CONTENT),
                         minLines = 3
                     )
                 }
             },
             confirmButton = {
                 TextButton(
-                    onClick = { viewModel.importCertificate(name, content) },
+                    onClick = {
+                        if (repairTargetServerId != null) {
+                            viewModel.importCertificateForServer(
+                                serverId = repairTargetServerId,
+                                name = name,
+                                content = content
+                            ) {
+                                onNavigateBack?.invoke()
+                            }
+                        } else {
+                            viewModel.importCertificate(name, content)
+                        }
+                    },
                     enabled = name.isNotBlank() && content.isNotBlank()
                 ) {
                     Text(stringResource(R.string.action_import))
@@ -205,7 +249,9 @@ fun CertificatesScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { certToDelete = null }) { Text(stringResource(R.string.action_cancel)) }
+                TextButton(onClick = { certToDelete = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
             }
         )
     }

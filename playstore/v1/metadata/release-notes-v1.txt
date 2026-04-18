@@ -1,0 +1,6 @@
+Termex 1.0.0
+
+- SSH keys, certificates, and host-key trust
+- Jump hosts and local, remote, dynamic forwarding
+- Snippets, workplaces, and persistent tmux reconnect
+- Biometric app lock and terminal tools

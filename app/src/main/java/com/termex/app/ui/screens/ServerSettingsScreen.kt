@@ -42,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -51,6 +52,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.termex.app.R
 import com.termex.app.core.ssh.SSHConfigParser
 import com.termex.app.domain.AuthMode
+import com.termex.app.ui.AutomationTags
 import com.termex.app.ui.viewmodel.ServerSettingsViewModel
 import java.io.File
 
@@ -63,23 +65,40 @@ fun ServerSettingsScreen(
     prefillPort: Int = 0,
     prefillUser: String = "",
     prefillKeyPath: String = "",
+    prefillCertificatePath: String = "",
     prefillJumpHost: String = "",
     prefillForwardAgent: Boolean = false,
     prefillIdentitiesOnly: Boolean = false,
+    prefillForwards: String = "",
     viewModel: ServerSettingsViewModel = hiltViewModel()
 ) {
     val formState by viewModel.formState.collectAsState()
     val keys by viewModel.keys.collectAsState()
+    val certificates by viewModel.certificates.collectAsState()
     val servers by viewModel.servers.collectAsState()
     val isSaving by viewModel.isSaving.collectAsState()
 
     var showAuthModeMenu by remember { mutableStateOf(false) }
     var showKeyMenu by remember { mutableStateOf(false) }
+    var showCertificateMenu by remember { mutableStateOf(false) }
     var showJumpHostMenu by remember { mutableStateOf(false) }
     var showPasswordVisible by remember { mutableStateOf(false) }
     var prefillApplied by remember(serverId) { mutableStateOf(false) }
 
-    LaunchedEffect(serverId, prefillHost, prefillPort, prefillUser, prefillKeyPath, prefillJumpHost, keys, servers) {
+    LaunchedEffect(
+        serverId,
+        prefillHost,
+        prefillPort,
+        prefillUser,
+        prefillKeyPath,
+        prefillCertificatePath,
+        prefillJumpHost,
+        prefillForwardAgent,
+        prefillIdentitiesOnly,
+        prefillForwards,
+        keys,
+        servers
+    ) {
         if (serverId != null) {
             viewModel.loadServer(serverId)
             return@LaunchedEffect
@@ -99,6 +118,17 @@ fun ServerSettingsScreen(
             viewModel.updateAuthMode(AuthMode.KEY)
             viewModel.updateSelectedKey(resolvedKeyPath, File(resolvedKeyPath).name)
         }
+        if (prefillCertificatePath.isNotBlank()) {
+            val resolvedCertificatePath = SSHConfigParser.findMatchingImportedCertificatePath(
+                prefillCertificatePath,
+                certificates
+            ) ?: prefillCertificatePath
+            viewModel.updateAuthMode(AuthMode.KEY)
+            viewModel.updateSelectedCertificate(
+                resolvedCertificatePath,
+                File(resolvedCertificatePath).name
+            )
+        }
         if (prefillJumpHost.isNotBlank()) {
             val jumpHostId = SSHConfigParser.resolveJumpHostId(prefillJumpHost, servers)
             val jumpHostName = servers.firstOrNull { it.id == jumpHostId }?.displayName
@@ -106,6 +136,9 @@ fun ServerSettingsScreen(
         }
         viewModel.updateForwardAgent(prefillForwardAgent)
         viewModel.updateIdentitiesOnly(prefillIdentitiesOnly)
+        if (prefillForwards.isNotBlank()) {
+            viewModel.updatePortForwards(SSHConfigParser.decodePortForwards(prefillForwards))
+        }
     }
 
     LaunchedEffect(isSaving) {
@@ -126,6 +159,7 @@ fun ServerSettingsScreen(
                 },
                 actions = {
                     IconButton(
+                        modifier = Modifier.testTag(AutomationTags.SERVER_SAVE),
                         onClick = { viewModel.triggerSave() },
                         enabled = formState.hostname.isNotBlank() && formState.username.isNotBlank()
                     ) {
@@ -150,7 +184,9 @@ fun ServerSettingsScreen(
                     onValueChange = { viewModel.updateName(it) },
                     label = { Text(stringResource(R.string.server_settings_label_display_name)) },
                     placeholder = { Text(stringResource(R.string.server_settings_placeholder_optional)) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(AutomationTags.SERVER_FIELD_DISPLAY_NAME),
                     singleLine = true
                 )
 
@@ -161,7 +197,9 @@ fun ServerSettingsScreen(
                     onValueChange = { viewModel.updateHostname(it) },
                     label = { Text(stringResource(R.string.server_settings_label_host)) },
                     placeholder = { Text(stringResource(R.string.server_settings_placeholder_host)) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(AutomationTags.SERVER_FIELD_HOST),
                     singleLine = true
                 )
 
@@ -172,7 +210,9 @@ fun ServerSettingsScreen(
                         value = formState.port,
                         onValueChange = { viewModel.updatePort(it) },
                         label = { Text(stringResource(R.string.server_settings_label_port)) },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag(AutomationTags.SERVER_FIELD_PORT),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
@@ -184,7 +224,9 @@ fun ServerSettingsScreen(
                     value = formState.username,
                     onValueChange = { viewModel.updateUsername(it) },
                     label = { Text(stringResource(R.string.server_settings_label_username)) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(AutomationTags.SERVER_FIELD_USERNAME),
                     singleLine = true
                 )
             }
@@ -202,7 +244,8 @@ fun ServerSettingsScreen(
                         AuthMode.KEY -> stringResource(R.string.server_settings_auth_ssh_key)
                         AuthMode.AUTO -> stringResource(R.string.server_settings_auth_auto)
                     },
-                    onClick = { showAuthModeMenu = true }
+                    onClick = { showAuthModeMenu = true },
+                    modifier = Modifier.testTag(AutomationTags.SERVER_AUTH_MODE)
                 )
                 DropdownMenu(
                     expanded = showAuthModeMenu,
@@ -278,7 +321,8 @@ fun ServerSettingsScreen(
                     SettingsRow(
                         title = stringResource(R.string.server_settings_auth_ssh_key),
                         value = formState.selectedKeyName ?: stringResource(R.string.server_settings_value_none),
-                        onClick = { showKeyMenu = true }
+                        onClick = { showKeyMenu = true },
+                        modifier = Modifier.testTag(AutomationTags.SERVER_KEY_PICKER)
                     )
                     DropdownMenu(
                         expanded = showKeyMenu,
@@ -309,6 +353,36 @@ fun ServerSettingsScreen(
                             modifier = Modifier.padding(top = 4.dp)
                         )
                     }
+
+                    SettingsDivider()
+
+                    SettingsRow(
+                        title = stringResource(R.string.server_settings_label_certificate),
+                        value = formState.selectedCertificateName ?: stringResource(R.string.server_settings_value_none),
+                        onClick = { showCertificateMenu = true },
+                        modifier = Modifier.testTag(AutomationTags.SERVER_CERTIFICATE_PICKER)
+                    )
+                    DropdownMenu(
+                        expanded = showCertificateMenu,
+                        onDismissRequest = { showCertificateMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.server_settings_value_none)) },
+                            onClick = {
+                                viewModel.updateSelectedCertificate(null, null)
+                                showCertificateMenu = false
+                            }
+                        )
+                        certificates.forEach { certificate ->
+                            DropdownMenuItem(
+                                text = { Text(certificate.name) },
+                                onClick = {
+                                    viewModel.updateSelectedCertificate(certificate.path, certificate.name)
+                                    showCertificateMenu = false
+                                }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -321,7 +395,8 @@ fun ServerSettingsScreen(
                 SettingsRow(
                     title = stringResource(R.string.server_settings_label_jump_host),
                     value = formState.jumpHostName ?: stringResource(R.string.server_settings_value_none),
-                    onClick = { showJumpHostMenu = true }
+                    onClick = { showJumpHostMenu = true },
+                    modifier = Modifier.testTag(AutomationTags.SERVER_JUMP_HOST_PICKER)
                 )
                 DropdownMenu(
                     expanded = showJumpHostMenu,
@@ -354,7 +429,8 @@ fun ServerSettingsScreen(
                     trailingContent = {
                         Switch(
                             checked = formState.forwardAgent,
-                            onCheckedChange = { viewModel.updateForwardAgent(it) }
+                            onCheckedChange = { viewModel.updateForwardAgent(it) },
+                            modifier = Modifier.testTag(AutomationTags.SERVER_FORWARD_AGENT)
                         )
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
@@ -369,10 +445,39 @@ fun ServerSettingsScreen(
                     trailingContent = {
                         Switch(
                             checked = formState.identitiesOnly,
-                            onCheckedChange = { viewModel.updateIdentitiesOnly(it) }
+                            onCheckedChange = { viewModel.updateIdentitiesOnly(it) },
+                            modifier = Modifier.testTag(AutomationTags.SERVER_IDENTITIES_ONLY)
                         )
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
+                SettingsDivider()
+
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.server_settings_label_persistent_session)) },
+                    supportingContent = { Text(stringResource(R.string.server_settings_persistent_session_description)) },
+                    trailingContent = {
+                        Switch(
+                            checked = formState.persistentSessionEnabled,
+                            onCheckedChange = { viewModel.updatePersistentSessionEnabled(it) },
+                            modifier = Modifier.testTag(AutomationTags.SERVER_PERSISTENT_SESSION)
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = formState.startupCommand,
+                    onValueChange = { viewModel.updateStartupCommand(it) },
+                    label = { Text(stringResource(R.string.server_settings_label_startup_command)) },
+                    placeholder = { Text(stringResource(R.string.server_settings_placeholder_startup_command)) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(AutomationTags.SERVER_STARTUP_COMMAND),
+                    minLines = 2
                 )
             }
 
@@ -409,7 +514,8 @@ private fun SettingsCard(content: @Composable () -> Unit) {
 private fun SettingsRow(
     title: String,
     value: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     ListItem(
         headlineContent = { Text(title) },
@@ -419,7 +525,7 @@ private fun SettingsRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         },
-        modifier = Modifier.clickable { onClick() },
+        modifier = modifier.clickable { onClick() },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
     )
 }

@@ -1,0 +1,12 @@
+{
+  "icon": "assets/icon/play-icon-512.png",
+  "featureGraphic": "assets/feature-graphic.png",
+  "phoneScreenshots": [
+    "assets/phone/01-onboarding-welcome.png",
+    "assets/phone/02-onboarding-review.png",
+    "assets/phone/03-servers-overview.png",
+    "assets/phone/04-settings-overview.png",
+    "assets/phone/05-extra-keys.png"
+  ],
+  "altText": "assets/alt-text.md"
+}

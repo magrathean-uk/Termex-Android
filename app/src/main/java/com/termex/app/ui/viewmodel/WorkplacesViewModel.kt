@@ -2,6 +2,8 @@ package com.termex.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.termex.app.core.PersistedRootRoute
+import com.termex.app.data.prefs.UserPreferencesRepository
 import com.termex.app.domain.Server
 import com.termex.app.domain.ServerRepository
 import com.termex.app.domain.Workplace
@@ -11,15 +13,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-
-data class WorkplaceWithServers(
-    val workplace: Workplace,
-    val servers: List<Server>
-)
 
 data class WorkplaceFormState(
     val name: String = "",
@@ -30,7 +26,8 @@ data class WorkplaceFormState(
 @HiltViewModel
 class WorkplacesViewModel @Inject constructor(
     private val workplaceRepository: WorkplaceRepository,
-    private val serverRepository: ServerRepository
+    private val serverRepository: ServerRepository,
+    private val userPreferencesRepository: UserPreferencesRepository
 ) : ViewModel() {
 
     val workplaces: StateFlow<List<Workplace>> = workplaceRepository.getAllWorkplaces()
@@ -45,21 +42,17 @@ class WorkplacesViewModel @Inject constructor(
     private val _formState = MutableStateFlow(WorkplaceFormState())
     val formState: StateFlow<WorkplaceFormState> = _formState.asStateFlow()
 
-    // For adding servers to workplace
-    private val _showAddServerDialog = MutableStateFlow<String?>(null) // workplace ID
+    private val _showAddServerDialog = MutableStateFlow<String?>(null)
     val showAddServerDialog: StateFlow<String?> = _showAddServerDialog.asStateFlow()
 
-    // Expanded workplace
     private val _expandedWorkplace = MutableStateFlow<String?>(null)
     val expandedWorkplace: StateFlow<String?> = _expandedWorkplace.asStateFlow()
 
+    private val _workplaceToDelete = MutableStateFlow<Workplace?>(null)
+    val workplaceToDelete: StateFlow<Workplace?> = _workplaceToDelete.asStateFlow()
+
     fun toggleExpanded(workplaceId: String) {
         _expandedWorkplace.value = if (_expandedWorkplace.value == workplaceId) null else workplaceId
-    }
-
-    fun getServersForWorkplace(workplaceId: String): StateFlow<List<Server>> {
-        return workplaceRepository.getServersForWorkplace(workplaceId)
-            .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     }
 
     fun showAddDialog() {
@@ -101,9 +94,22 @@ class WorkplacesViewModel @Inject constructor(
         }
     }
 
-    fun deleteWorkplace(workplace: Workplace) {
+    fun requestDeleteWorkplace(workplace: Workplace) {
+        _workplaceToDelete.value = workplace
+    }
+
+    fun dismissDeleteWorkplaceDialog() {
+        _workplaceToDelete.value = null
+    }
+
+    fun confirmDeleteWorkplace() {
+        val workplace = _workplaceToDelete.value ?: return
         viewModelScope.launch {
             workplaceRepository.deleteWorkplace(workplace)
+            if (_expandedWorkplace.value == workplace.id) {
+                _expandedWorkplace.value = null
+            }
+            _workplaceToDelete.value = null
         }
     }
 
@@ -119,6 +125,12 @@ class WorkplacesViewModel @Inject constructor(
         viewModelScope.launch {
             val updatedServer = server.copy(workplaceId = workplaceId)
             serverRepository.updateServer(updatedServer)
+        }
+    }
+
+    fun rememberWorkplaceRoute(workplaceId: String) {
+        viewModelScope.launch {
+            userPreferencesRepository.setPersistedRootRoute(PersistedRootRoute.workplace(workplaceId))
         }
     }
 

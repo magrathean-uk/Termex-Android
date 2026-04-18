@@ -138,6 +138,9 @@ class ServersViewModel @Inject constructor(
         if (server.keyId?.let { !File(it).exists() } == true) {
             return "Configured key file is missing"
         }
+        if (server.certificatePath?.let { !File(it).exists() } == true) {
+            return "Configured certificate is missing"
+        }
         if (server.passwordKeychainID?.let { passwordStore.getPassword(it) == null } == true) {
             return "Saved password is unavailable"
         }

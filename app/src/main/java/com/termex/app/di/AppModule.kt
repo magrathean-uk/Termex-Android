@@ -6,6 +6,8 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
 import com.termex.app.data.local.KnownHostDao
+import com.termex.app.data.local.SessionStateDao
+import com.termex.app.data.local.SessionStateDatabase
 import com.termex.app.data.local.ServerDao
 import com.termex.app.data.local.SnippetDao
 import com.termex.app.data.local.TermexDatabase
@@ -56,7 +58,17 @@ object AppModule {
     }
 
     @Provides
-    fun provideSessionStateDao(database: TermexDatabase): com.termex.app.data.local.SessionStateDao {
+    @Singleton
+    fun provideSessionStateDatabase(@ApplicationContext context: Context): SessionStateDatabase {
+        return Room.databaseBuilder(
+            context,
+            SessionStateDatabase::class.java,
+            SessionStateDatabase.DB_NAME
+        ).build()
+    }
+
+    @Provides
+    fun provideSessionStateDao(database: SessionStateDatabase): SessionStateDao {
         return database.sessionStateDao()
     }
 

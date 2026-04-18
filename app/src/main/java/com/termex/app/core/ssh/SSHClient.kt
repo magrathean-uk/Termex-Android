@@ -5,25 +5,36 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import org.apache.sshd.agent.local.LocalAgentFactory
 import org.apache.sshd.client.SshClient
+import org.apache.sshd.client.channel.ClientChannelEvent
+import org.apache.sshd.client.config.keys.ClientIdentityLoader
 import org.apache.sshd.client.channel.ChannelShell
 import org.apache.sshd.client.session.ClientSession
 import org.apache.sshd.common.NamedResource
+import org.apache.sshd.common.config.keys.PublicKeyEntry
+import org.apache.sshd.common.config.keys.PublicKeyEntryResolver
 import org.apache.sshd.common.config.keys.FilePasswordProvider
 import org.apache.sshd.common.session.Session
 import org.apache.sshd.common.session.SessionListener
+import org.apache.sshd.common.util.io.resource.PathResource
 import org.apache.sshd.common.util.net.SshdSocketAddress
 import org.apache.sshd.common.util.security.SecurityUtils
 import org.apache.sshd.core.CoreModuleProperties
 import org.apache.sshd.common.util.security.bouncycastle.BouncyCastleSecurityProviderRegistrar
 import org.apache.sshd.common.util.security.eddsa.EdDSASecurityProviderRegistrar
+import org.apache.sshd.server.forward.AcceptAllForwardingFilter
 import org.bouncycastle.jce.provider.BouncyCastleProvider
+import java.io.ByteArrayOutputStream
 import java.io.ByteArrayInputStream
+import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.security.KeyPair
+import java.security.PublicKey
 import java.security.Security
 import java.time.Duration
+import kotlin.math.min
 import javax.inject.Inject
 
 sealed class SSHConnectionState {
@@ -46,6 +57,8 @@ data class SSHConnectionConfig(
     val username: String,
     val password: String? = null,
     val privateKey: ByteArray? = null,
+    val identityPath: String? = null,
+    val certificatePath: String? = null,
     val privateKeyPassphrase: String? = null,
     val keepAliveIntervalSeconds: Int = 30,
     val connectTimeoutMillis: Int = 15_000,
@@ -70,6 +83,8 @@ data class SSHConnectionConfig(
             username == other.username &&
             password == other.password &&
             privateKeyMatches &&
+            identityPath == other.identityPath &&
+            certificatePath == other.certificatePath &&
             privateKeyPassphrase == other.privateKeyPassphrase &&
             keepAliveIntervalSeconds == other.keepAliveIntervalSeconds &&
             connectTimeoutMillis == other.connectTimeoutMillis &&
@@ -87,6 +102,8 @@ data class SSHConnectionConfig(
         result = 31 * result + username.hashCode()
         result = 31 * result + (password?.hashCode() ?: 0)
         result = 31 * result + (privateKey?.contentHashCode() ?: 0)
+        result = 31 * result + (identityPath?.hashCode() ?: 0)
+        result = 31 * result + (certificatePath?.hashCode() ?: 0)
         result = 31 * result + (privateKeyPassphrase?.hashCode() ?: 0)
         result = 31 * result + keepAliveIntervalSeconds
         result = 31 * result + connectTimeoutMillis
@@ -98,6 +115,10 @@ data class SSHConnectionConfig(
         result = 31 * result + verifyHostKeyCertificates.hashCode()
         return result
     }
+}
+
+fun SSHConnectionConfig.hasCredentials(): Boolean {
+    return !password.isNullOrBlank() || privateKey != null || !identityPath.isNullOrBlank()
 }
 
 class SSHClient @Inject constructor(
@@ -114,6 +135,7 @@ class SSHClient @Inject constructor(
     @Volatile private var jumpClient: SshClient? = null
     @Volatile private var jumpSession: ClientSession? = null
     @Volatile private var jumpForward: SshdSocketAddress? = null
+    @Volatile private var activeConfig: SSHConnectionConfig? = null
 
     private val _connectionState = MutableStateFlow<SSHConnectionState>(SSHConnectionState.Disconnected)
     val connectionState: StateFlow<SSHConnectionState> = _connectionState.asStateFlow()
@@ -141,7 +163,10 @@ class SSHClient @Inject constructor(
         hostKeyVerifier.trustHostKey(result)
     }
 
-    suspend fun connect(config: SSHConnectionConfig): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun connect(
+        config: SSHConnectionConfig,
+        openShell: Boolean = true
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             disconnect() // Ensure fresh start
             _connectionState.value = SSHConnectionState.Connecting
@@ -149,6 +174,7 @@ class SSHClient @Inject constructor(
             val (client, sess) = connectInternal(config)
             sshClient = client
             session = sess
+            activeConfig = config
 
             // Detect remote disconnects
             sess.addSessionListener(object : SessionListener {
@@ -160,22 +186,26 @@ class SSHClient @Inject constructor(
                 }
             })
 
-            // Start shell with PTY
-            val pty = pendingPtySize
-            val sh = sess.createShellChannel()
-            sh.setUsePty(true)
-            sh.ptyType = "xterm-256color"
-            sh.ptyColumns = pty.cols
-            sh.ptyLines = pty.rows
-            sh.ptyWidth = pty.widthPx
-            sh.ptyHeight = pty.heightPx
-            sh.isAgentForwarding = config.forwardAgent
+            if (openShell) {
+                val pty = pendingPtySize
+                val sh = sess.createShellChannel()
+                sh.setUsePty(true)
+                sh.ptyType = "xterm-256color"
+                sh.ptyColumns = pty.cols
+                sh.ptyLines = pty.rows
+                sh.ptyWidth = pty.widthPx
+                sh.ptyHeight = pty.heightPx
+                sh.isAgentForwarding = config.forwardAgent
 
-            sh.open().verify(config.connectTimeoutMillis.toLong())
-            shell = sh
-
-            inputStream = sh.invertedOut
-            outputStream = sh.invertedIn
+                sh.open().verify(config.connectTimeoutMillis.toLong())
+                shell = sh
+                inputStream = sh.invertedOut
+                outputStream = sh.invertedIn
+            } else {
+                shell = null
+                inputStream = null
+                outputStream = null
+            }
             
             _connectionState.value = SSHConnectionState.Connected
             Result.success(Unit)
@@ -230,6 +260,12 @@ class SSHClient @Inject constructor(
         hostKeyVerifier.setTarget(verifyHost, verifyPort)
         hostKeyVerifier.primeKnownHost(verifyHost, verifyPort)
 
+        val agentFactory = if (config.forwardAgent) {
+            LocalAgentFactory()
+        } else {
+            null
+        }
+
         // Serialize MINA client init to prevent NIO thread pool contention under parallel connects
         val client = synchronized(minaInitLock) {
             val c = SshClient.setUpDefaultClient()
@@ -244,14 +280,11 @@ class SSHClient @Inject constructor(
                     Duration.ofSeconds(config.keepAliveIntervalSeconds.toLong())
                 )
             }
-            CoreModuleProperties.ABORT_ON_INVALID_CERTIFICATE.set(c, config.verifyHostKeyCertificates)
-            if (!config.verifyHostKeyCertificates) {
-                val factories = c.signatureFactories
-                if (!factories.isNullOrEmpty()) {
-                    val filtered = factories.filterNot { it.name.contains("-cert-v01@openssh.com") }
-                    if (filtered.isNotEmpty()) c.signatureFactories = filtered
-                }
+            c.forwardingFilter = AcceptAllForwardingFilter.INSTANCE
+            if (agentFactory != null) {
+                c.agentFactory = agentFactory
             }
+            CoreModuleProperties.ABORT_ON_INVALID_CERTIFICATE.set(c, config.verifyHostKeyCertificates)
             c.start()
             c
         }
@@ -260,6 +293,9 @@ class SSHClient @Inject constructor(
             session = client.connect(config.username, connectHost, connectPort)
                 .verify(config.connectTimeoutMillis.toLong())
                 .session
+            if (agentFactory != null) {
+                populateForwardingAgent(agentFactory.agent, session, config)
+            }
             authenticate(session, config)
             return client to session
         } catch (e: Exception) {
@@ -300,12 +336,57 @@ class SSHClient @Inject constructor(
         }
     }
 
+    private fun populateForwardingAgent(
+        agent: org.apache.sshd.agent.SshAgent,
+        session: ClientSession,
+        config: SSHConnectionConfig
+    ) {
+        val keyPairs = loadKeyPairs(session, config)
+        if (keyPairs.isEmpty()) return
+
+        keyPairs.forEachIndexed { index, keyPair ->
+            agent.addIdentity(keyPair, "termex-$index")
+        }
+    }
+
     private fun loadKeyPairs(session: ClientSession, config: SSHConnectionConfig): List<KeyPair> {
-        val keyBytes = config.privateKey ?: return emptyList()
         val passwordProvider = config.privateKeyPassphrase?.let { FilePasswordProvider.of(it) }
+        config.identityPath?.takeIf { it.isNotBlank() }?.let { identityPath ->
+            val identityFile = File(identityPath)
+            if (!identityFile.exists()) return emptyList()
+
+            val keyPairs = ClientIdentityLoader.DEFAULT
+                .loadClientIdentities(session, PathResource(identityFile.toPath()), passwordProvider)
+                .toList()
+            if (keyPairs.isEmpty()) return emptyList()
+
+            val certificatePublicKey = config.certificatePath
+                ?.takeIf { it.isNotBlank() }
+                ?.let(::loadCertificatePublicKey)
+
+            return if (certificatePublicKey == null) {
+                keyPairs
+            } else {
+                keyPairs.map { keyPair -> KeyPair(certificatePublicKey, keyPair.private) }
+            }
+        }
+
+        val keyBytes = config.privateKey ?: return emptyList()
         val resource = NamedResource.ofName("termex-key")
         val input = ByteArrayInputStream(keyBytes)
         return SecurityUtils.loadKeyPairIdentities(session, resource, input, passwordProvider).toList()
+    }
+
+    private fun loadCertificatePublicKey(certificatePath: String): PublicKey {
+        val certificateFile = File(certificatePath)
+        require(certificateFile.exists()) { "Certificate file not found: $certificatePath" }
+
+        val entry = PublicKeyEntry.parsePublicKeyEntry(certificateFile.readText().trim())
+        return entry.resolvePublicKey(
+            null,
+            emptyMap(),
+            PublicKeyEntryResolver.FAILING
+        )
     }
     
     fun resizeTerminal(cols: Int, rows: Int, widthPx: Int = 0, heightPx: Int = 0) {
@@ -326,8 +407,47 @@ class SSHClient @Inject constructor(
             cleanupConnection()
         }
     }
-    
+
     suspend fun sendData(data: String) = sendData(data.toByteArray())
+
+    suspend fun runShellCommand(
+        command: String,
+        expectedFragment: String? = null,
+        timeoutMillis: Long = 5_000L
+    ): String = withContext(Dispatchers.IO) {
+        val sess = session ?: error("Not connected")
+        val stdout = ByteArrayOutputStream()
+        val stderr = ByteArrayOutputStream()
+        val normalizedCommand = command.trim()
+        if (normalizedCommand.isBlank()) {
+            return@withContext ""
+        }
+
+        val exec = sess.createExecChannel(normalizedCommand)
+        if (activeConfig?.forwardAgent == true) {
+            exec.isAgentForwarding = true
+        }
+        exec.setOut(stdout)
+        exec.setErr(stderr)
+
+        try {
+            exec.open().verify(timeoutMillis)
+            val events = exec.waitFor(setOf(ClientChannelEvent.CLOSED), timeoutMillis)
+            if (!events.contains(ClientChannelEvent.CLOSED)) {
+                throw IllegalStateException("Command timed out: $normalizedCommand")
+            }
+            val output = stdout.toString(Charsets.UTF_8.name()) + stderr.toString(Charsets.UTF_8.name())
+            if (expectedFragment.isNullOrBlank()) {
+                return@withContext output
+            }
+            return@withContext output
+        } finally {
+            try {
+                exec.close(false)
+            } catch (_: Exception) {
+            }
+        }
+    }
     
     private fun cleanupConnection() {
         try { shell?.close() } catch (_: Exception) {}
@@ -349,6 +469,7 @@ class SSHClient @Inject constructor(
         jumpClient = null
         jumpSession = null
         jumpForward = null
+        activeConfig = null
         inputStream = null
         outputStream = null
     }
@@ -378,7 +499,15 @@ class SSHClient @Inject constructor(
         local: SshdSocketAddress
     ): SshdSocketAddress {
         val sess = session ?: throw IllegalStateException("Not connected")
-        return sess.startRemotePortForwarding(remote, local)
+        try {
+            return sess.startRemotePortForwarding(remote, local)
+        } catch (e: Exception) {
+            val suffix = e.message?.takeIf { it.isNotBlank() }?.let { ": $it" } ?: ""
+            throw IllegalStateException(
+                "Remote forward ${remote.hostName}:${remote.port} -> ${local.hostName}:${local.port} failed (${e::class.java.simpleName}$suffix)",
+                e
+            )
+        }
     }
 
     internal fun stopRemotePortForwarding(remote: SshdSocketAddress) {
@@ -388,7 +517,15 @@ class SSHClient @Inject constructor(
 
     internal fun startDynamicPortForwarding(local: SshdSocketAddress): SshdSocketAddress {
         val sess = session ?: throw IllegalStateException("Not connected")
-        return sess.startDynamicPortForwarding(local)
+        try {
+            return sess.startDynamicPortForwarding(local)
+        } catch (e: Exception) {
+            val suffix = e.message?.takeIf { it.isNotBlank() }?.let { ": $it" } ?: ""
+            throw IllegalStateException(
+                "Dynamic forward ${local.hostName}:${local.port} failed (${e::class.java.simpleName}$suffix)",
+                e
+            )
+        }
     }
 
     internal fun stopDynamicPortForwarding(local: SshdSocketAddress) {

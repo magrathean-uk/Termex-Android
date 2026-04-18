@@ -164,6 +164,7 @@ fun SSHConfigBrowserScreen(
                                         host.hostname?.let { add("Host: $it") }
                                         host.user?.let { add("User: $it") }
                                         host.port?.let { add("Port: $it") }
+                                        host.certificateFile?.let { add("Cert: $it") }
                                         host.proxyJump?.let { add("Jump: $it") }
                                     }
                                     if (details.isNotEmpty()) {

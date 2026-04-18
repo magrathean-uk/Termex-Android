@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.onSizeChanged
@@ -55,6 +57,11 @@ fun TerminalView(
     }
     
     val effectiveFontSize = fontSize * scale
+    val transcriptSummary = remember(lines) {
+        lines.takeLast(64).joinToString("\n") { line ->
+            line.cells.joinToString("") { cell -> cell.char.toString() }.trimEnd()
+        }
+    }
     val charWidthPx = remember(effectiveFontSize) {
         with(density) { (effectiveFontSize * 0.6f).sp.toPx() }
     }
@@ -95,6 +102,9 @@ fun TerminalView(
         modifier = modifier
             .fillMaxSize()
             .background(backgroundColor)
+            .semantics {
+                contentDescription = transcriptSummary
+            }
             .onSizeChanged { size -> viewSize = size }
             .pointerInput(Unit) {
                 detectTapGestures(

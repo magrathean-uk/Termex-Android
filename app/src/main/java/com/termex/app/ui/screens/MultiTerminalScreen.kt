@@ -90,8 +90,9 @@ fun MultiTerminalScreen(
     }
 
     LaunchedEffect(servers) {
-        if (servers.isNotEmpty() && paneStates.isEmpty()) {
-            viewModel.initializePanes(servers)
+        viewModel.initializePanes(servers)
+        viewModel.syncPersistedRoute()
+        if (paneStates.isEmpty()) {
             servers.forEach { server ->
                 viewModel.connectServer(server)
             }
