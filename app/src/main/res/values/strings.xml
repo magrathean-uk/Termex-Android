@@ -1,0 +1,373 @@
+<resources>
+    <string name="app_name">Termex</string>
+
+    <!-- Navigation -->
+    <string name="nav_servers">Servers</string>
+    <string name="nav_workplaces">Workplaces</string>
+    <string name="nav_keys">Keys</string>
+    <string name="nav_snippets">Snippets</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Servers -->
+    <string name="title_servers">Servers</string>
+    <string name="action_add_server">Add Server</string>
+    <string name="demo_mode_active">DEMO MODE ACTIVE</string>
+    <string name="demo_mode_message">Real server connections are disabled. For App Store review only.</string>
+    <string name="empty_servers">No servers. Tap + to add one.</string>
+    <string name="try_demo_server">Try Termex without a real server</string>
+    <string name="action_more">More</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_port_forwarding">Port Forwarding</string>
+    <string name="action_delete">Delete</string>
+
+    <!-- Keys -->
+    <string name="title_ssh_keys">SSH Keys</string>
+    <string name="action_add_key">Add Key</string>
+    <string name="action_generate_new_key">Generate New Key</string>
+    <string name="action_import_key">Import Key</string>
+    <string name="empty_ssh_keys">No SSH keys. Tap + to add one.</string>
+    <string name="title_generate_key">Generate Key</string>
+    <string name="label_key_name_example">Key Name (e.g. id_ed25519)</string>
+    <string name="action_generate">Generate</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="title_import_private_key">Import Private Key</string>
+    <string name="label_key_name">Key Name</string>
+    <string name="label_private_key_content">Private Key Content</string>
+    <string name="action_import">Import</string>
+
+    <!-- Snippets -->
+    <string name="title_snippets">Snippets</string>
+    <string name="action_add_snippet">Add Snippet</string>
+    <string name="action_duplicate_snippet">Duplicate</string>
+    <string name="empty_snippets">No snippets yet. Tap + to add one.</string>
+    <string name="title_add_snippet">Add Snippet</string>
+    <string name="title_edit_snippet">Edit Snippet</string>
+    <string name="label_name">Name</string>
+    <string name="label_snippet_name_optional">Name (optional)</string>
+    <string name="label_command">Command</string>
+    <string name="action_save">Save</string>
+    <string name="snippet_untitled">Untitled</string>
+
+    <!-- Settings -->
+    <string name="title_settings">Settings</string>
+    <string name="title_theme">Theme</string>
+    <string name="title_workplaces">Workplaces</string>
+    <string name="workplaces_supporting">Manage server groups for multi-terminal</string>
+    <string name="title_color_scheme">Color Scheme</string>
+    <string name="title_font">Font</string>
+    <string name="title_font_size">Font Size</string>
+    <string name="title_keep_alive_interval">Keep-Alive Interval</string>
+    <string name="action_reset_app">Reset App</string>
+    <string name="reset_app_supporting">Show onboarding again</string>
+    <string name="title_version">Version</string>
+    <string name="title_reset_app">Reset App</string>
+    <string name="reset_app_message">This will reset the app and show the onboarding screen again. Your servers and data will be preserved.</string>
+    <string name="action_reset">Reset</string>
+    <string name="version_demo_format">%1$s (Demo)</string>
+
+    <!-- Common Actions -->
+    <string name="action_back">Back</string>
+    <string name="action_done">Done</string>
+    <string name="action_close">Close</string>
+    <string name="action_add_workplace">Add workplace</string>
+    <string name="action_open_workplace">Open all</string>
+    <string name="action_edit_workplace">Edit workplace</string>
+    <string name="action_delete_workplace">Delete workplace</string>
+    <string name="action_add_server_to_workplace">Add server</string>
+    <string name="action_remove_server_from_workplace">Remove server from workplace</string>
+    <string name="action_expand_workplace">Expand workplace</string>
+    <string name="action_collapse_workplace">Collapse workplace</string>
+
+    <!-- Workplaces -->
+    <string name="workplaces_empty">No workplaces yet.</string>
+    <string name="workplaces_empty_supporting">Create one to group servers for multi-terminal.</string>
+    <string name="workplaces_empty_action">Create workplace</string>
+    <string name="workplaces_new_title">New Workplace</string>
+    <string name="workplaces_edit_title">Edit Workplace</string>
+    <string name="workplaces_delete_title">Delete workplace?</string>
+    <string name="workplaces_delete_message">Delete "%1$s"? Servers in it will be unassigned.</string>
+    <string name="workplaces_add_server_title">Add server to %1$s</string>
+    <string name="workplaces_add_server_empty">No unassigned servers are available. Create a server first or remove one from another workplace.</string>
+    <string name="workplaces_no_servers">No servers in this workplace yet. Add one to use multi-terminal.</string>
+    <plurals name="workplaces_server_count">
+        <item quantity="one">%1$d server</item>
+        <item quantity="other">%1$d servers</item>
+    </plurals>
+
+    <!-- Settings (additional) -->
+    <string name="settings_biometric_lock">Biometric Lock</string>
+    <string name="settings_enabled">Enabled</string>
+    <string name="settings_disabled">Disabled</string>
+    <string name="settings_known_hosts">Known Hosts</string>
+    <string name="settings_known_hosts_supporting">Manage trusted server fingerprints</string>
+    <string name="settings_ssh_config_browser">SSH Config Browser</string>
+    <string name="settings_ssh_config_browser_supporting">Import servers from SSH config file</string>
+    <string name="settings_backup_transfer">Backup &amp; Transfer</string>
+    <string name="settings_backup_transfer_supporting">Keep metadata local and move archives between devices</string>
+    <string name="settings_clear_saved_sessions">Clear Saved Sessions</string>
+    <string name="settings_clear_saved_sessions_supporting">Remove all saved terminal sessions</string>
+
+    <!-- Backup & Transfer -->
+    <string name="backup_transfer_title">Backup &amp; Transfer</string>
+    <string name="backup_transfer_local_title">Local Backup</string>
+    <string name="backup_transfer_local_supporting">Metadata stays on this device. Android backup and device transfer can move it between phones.</string>
+    <string name="backup_transfer_archive_title">Archive Transfer</string>
+    <string name="backup_transfer_archive_supporting">Import or export a password-protected Termex archive.</string>
+    <string name="backup_transfer_open_archive">Open Archive Transfer</string>
+
+    <!-- Terminal -->
+    <string name="terminal_disconnect_title">Disconnect?</string>
+    <string name="terminal_disconnect_message">Are you sure you want to disconnect from %1$s?</string>
+    <string name="terminal_disconnect">Disconnect</string>
+    <string name="terminal_no_snippets">No snippets. Add them in the Snippets tab.</string>
+    <string name="terminal_title">Terminal</string>
+    <string name="terminal_connecting">Connecting…</string>
+    <string name="terminal_verifying_host">Verifying Host…</string>
+    <string name="terminal_error">Error</string>
+    <string name="terminal_disconnected">Disconnected</string>
+    <string name="terminal_connecting_to">Connecting to %1$s…</string>
+    <string name="terminal_verifying_host_key">Verifying host key…</string>
+    <string name="terminal_connection_failed">Connection Failed</string>
+    <string name="terminal_reconnect">Reconnect</string>
+
+    <!-- Port Forwarding -->
+    <string name="port_forwarding_title">Port Forwarding - %1$s</string>
+    <string name="port_forwarding_empty">No port forwards configured.\nTap + to add one.</string>
+    <string name="port_forwarding_active">Active</string>
+    <string name="port_forwarding_inactive">Inactive</string>
+    <string name="port_forwarding_add_title">Add Port Forward</string>
+    <string name="port_forwarding_edit_title">Edit Port Forward</string>
+    <string name="port_forwarding_type">Type</string>
+    <string name="port_forwarding_local_port">Local Port</string>
+    <string name="port_forwarding_remote_host">Remote Host</string>
+    <string name="port_forwarding_remote_port">Remote Port</string>
+    <string name="port_forwarding_bind_address">Bind Address</string>
+
+    <!-- Server Settings -->
+    <string name="server_settings_title_new">New Server</string>
+    <string name="server_settings_title_edit">Edit Server</string>
+    <string name="server_settings_section_connection">CONNECTION</string>
+    <string name="server_settings_label_display_name">Display Name</string>
+    <string name="server_settings_placeholder_optional">Optional</string>
+    <string name="server_settings_label_host">Host</string>
+    <string name="server_settings_placeholder_host">example.com or IP address</string>
+    <string name="server_settings_label_port">Port</string>
+    <string name="server_settings_label_username">Username</string>
+    <string name="server_settings_section_auth">AUTHENTICATION</string>
+    <string name="server_settings_label_method">Method</string>
+    <string name="server_settings_auth_password">Password</string>
+    <string name="server_settings_auth_ssh_key">SSH Key</string>
+    <string name="server_settings_auth_auto">Auto</string>
+    <string name="server_settings_auth_auto_try_both">Auto (try both)</string>
+    <string name="server_settings_placeholder_password_saved">Password saved</string>
+    <string name="server_settings_placeholder_enter_password">Enter password</string>
+    <string name="server_settings_password_saved_hint">Password is saved. Enter new password to change or tap X to remove.</string>
+    <string name="server_settings_value_none">None</string>
+    <string name="server_settings_no_ssh_keys_hint">No SSH keys. Generate or import keys in the Keys tab.</string>
+    <string name="server_settings_label_certificate">Certificate</string>
+    <string name="server_settings_section_advanced">ADVANCED</string>
+    <string name="server_settings_label_jump_host">Jump Host</string>
+    <string name="server_settings_label_forward_agent">Forward Agent</string>
+    <string name="server_settings_forward_agent_description">Forward SSH agent to remote host</string>
+    <string name="server_settings_label_identities_only">Identities Only</string>
+    <string name="server_settings_identities_only_description">Only use explicitly configured keys; ignore SSH agent offers</string>
+    <string name="server_settings_label_persistent_session">Persistent Session</string>
+    <string name="server_settings_persistent_session_description">Reattach with tmux and reopen this server on cold launch</string>
+    <string name="server_settings_label_startup_command">Startup Command</string>
+    <string name="server_settings_placeholder_startup_command">Optional command to run after login</string>
+
+    <!-- Certificates -->
+    <string name="certificates_title">Certificates</string>
+    <string name="certificates_empty_title">No certificates</string>
+    <string name="certificates_empty_description">Import OpenSSH certificates to use for authentication</string>
+    <string name="certificates_import_title">Import Certificate</string>
+    <string name="certificates_label_name">Certificate Name</string>
+    <string name="certificates_placeholder_name">e.g. id_ed25519-cert.pub</string>
+    <string name="certificates_label_content">Certificate Content</string>
+    <string name="certificates_placeholder_content">Paste OpenSSH certificate…</string>
+    <string name="certificates_ca_fingerprint">CA: %1$s</string>
+    <string name="certificates_delete_title">Delete Certificate</string>
+    <string name="certificates_delete_message">Delete \"%1$s\"? This cannot be undone.</string>
+
+    <!-- Known Hosts -->
+    <string name="known_hosts_title">Known Hosts</string>
+    <string name="known_hosts_action_clear_all">Clear All</string>
+    <string name="known_hosts_empty_title">No known hosts</string>
+    <string name="known_hosts_empty_description">Trusted hosts will appear here after connecting</string>
+    <string name="known_hosts_remove_title">Remove Host</string>
+    <string name="known_hosts_remove_message">Remove %1$s from known hosts? You will be prompted to verify the host key on next connection.</string>
+    <string name="known_hosts_action_remove">Remove</string>
+    <string name="known_hosts_clear_all_title">Clear All Known Hosts</string>
+    <string name="known_hosts_clear_all_message">Remove all trusted hosts? You will need to re-verify all servers on next connection.</string>
+
+    <string name="demo_mode_banner">Demo mode – live connections are disabled</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_welcome_title">Welcome to Termex</string>
+    <string name="onboarding_welcome_description">A powerful SSH terminal client for Android. Connect to your servers securely from anywhere.</string>
+    <string name="onboarding_servers_title">Manage Servers</string>
+    <string name="onboarding_servers_description">Save your server connections with support for password and key-based authentication.</string>
+    <string name="onboarding_keys_title">SSH Key Management</string>
+    <string name="onboarding_keys_description">Generate and import SSH keys directly on your device. Your private keys never leave your phone.</string>
+    <string name="onboarding_snippets_title">Command Snippets</string>
+    <string name="onboarding_snippets_description">Save frequently used commands as snippets for quick access during your terminal sessions.</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_get_started">Get Started</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_demo_mode_enabled">Demo mode enabled</string>
+    <string name="onboarding_demo_mode_taps_remaining">%1$d taps to enable demo mode</string>
+    <string name="onboarding_try_demo_mode">Try Demo Mode</string>
+    <string name="onboarding_title">Guided Setup</string>
+    <string name="onboarding_guided_welcome_description">Set up your first SSH destination, auth, jump host, tunnels, and session behavior in one flow.</string>
+    <string name="onboarding_welcome_features_title">What this setup covers</string>
+    <string name="onboarding_feature_connection_title">Destination connection</string>
+    <string name="onboarding_feature_connection_body">Name, host, port, and username.</string>
+    <string name="onboarding_feature_identity_title">Keys and certificates</string>
+    <string name="onboarding_feature_identity_body">Import and select identities without leaving onboarding.</string>
+    <string name="onboarding_feature_jump_title">Jump host and tunnels</string>
+    <string name="onboarding_feature_jump_body">Direct, existing jump host, or create a new bastion now.</string>
+    <string name="onboarding_demo_mode_enabled_state">Demo Mode Ready</string>
+    <string name="onboarding_start_setup">Start Setup</string>
+    <string name="onboarding_finish_setup">Create Server &amp; Continue</string>
+    <string name="onboarding_continue">Continue</string>
+    <string name="onboarding_destination_title">Destination Server</string>
+    <string name="onboarding_destination_description">Define the main SSH target you want Termex to open first.</string>
+    <string name="onboarding_destination_section_title">Server Connection</string>
+    <string name="onboarding_auth_title">Authentication</string>
+    <string name="onboarding_auth_description">Choose how Termex should authenticate to this server.</string>
+    <string name="onboarding_auth_section_title">Primary Authentication</string>
+    <string name="onboarding_certificate_title">Certificate</string>
+    <string name="onboarding_jump_title">Jump Host</string>
+    <string name="onboarding_jump_description">Route through a bastion only if you need one.</string>
+    <string name="onboarding_jump_mode_title">Connection Path</string>
+    <string name="onboarding_jump_mode_direct">Direct</string>
+    <string name="onboarding_jump_mode_existing">Existing Jump Host</string>
+    <string name="onboarding_jump_mode_custom">Create Jump Host</string>
+    <string name="onboarding_jump_custom_title">New Jump Host</string>
+    <string name="onboarding_jump_reuse_auth_title">Reuse destination auth</string>
+    <string name="onboarding_jump_reuse_auth_body">Use the same auth choice and identities for the jump host.</string>
+    <string name="onboarding_jump_auth_title">Jump Host Authentication</string>
+    <string name="onboarding_forwarding_title">Forwarding &amp; Session</string>
+    <string name="onboarding_forwarding_description">Add tunnels now, then choose how the terminal should resume.</string>
+    <string name="onboarding_forwarding_section_title">Port Forwards</string>
+    <string name="onboarding_forwarding_empty">No forwards yet.</string>
+    <string name="onboarding_session_title">Session Defaults</string>
+    <string name="onboarding_persistent_tmux_description">Reattach to a named tmux session on reconnect.</string>
+    <string name="onboarding_review_title">Review</string>
+    <string name="onboarding_review_description">Check the server profile before entering the app.</string>
+    <string name="onboarding_review_summary_title">Setup Summary</string>
+    <string name="onboarding_review_skip_body">Skip setup now. You can add servers later from the Servers tab.</string>
+    <string name="onboarding_review_key">Key</string>
+    <string name="onboarding_review_certificate">Certificate</string>
+    <string name="onboarding_review_jump">Jump Host</string>
+    <string name="onboarding_review_forwards">Forwards</string>
+
+    <!-- SSH Dialogs -->
+    <string name="ssh_dialog_password_required">Password Required</string>
+    <string name="ssh_dialog_enter_password">Enter password for %1$s</string>
+    <string name="ssh_dialog_password_label">Password</string>
+    <string name="ssh_dialog_connect">Connect</string>
+    <string name="ssh_dialog_host_key_changed">Host Key Changed</string>
+    <string name="ssh_dialog_unknown_host">Unknown Host</string>
+    <string name="ssh_dialog_host_authenticity">The authenticity of host \'%1$s:%2$s\' can\'t be established.</string>
+    <string name="ssh_dialog_key_fingerprint">%1$s key fingerprint is:</string>
+    <string name="ssh_dialog_continue_connecting">Are you sure you want to continue connecting?</string>
+    <string name="ssh_dialog_host_key_warning">WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!</string>
+    <string name="ssh_dialog_possible_attack">It is possible that someone is doing something nasty!</string>
+    <string name="ssh_dialog_host_info">Host: %1$s:%2$s</string>
+    <string name="ssh_dialog_old_fingerprint">Old fingerprint:</string>
+    <string name="ssh_dialog_new_fingerprint">New fingerprint:</string>
+    <string name="ssh_dialog_accept_explanation">If you expected this change (e.g., server reinstall), you can accept the new key.</string>
+    <string name="ssh_dialog_accept_new_key">Accept New Key</string>
+    <string name="ssh_dialog_accept">Accept</string>
+    <string name="ssh_dialog_reject">Reject</string>
+
+    <!-- Biometric Lock -->
+    <string name="biometric_title_locked">Termex is Locked</string>
+    <string name="biometric_authenticate_message">Authenticate to unlock</string>
+    <string name="biometric_unlock">Unlock</string>
+    <string name="biometric_exit">Exit</string>
+
+    <!-- Server List -->
+    <string name="server_delete_title">Delete Server</string>
+    <string name="server_delete_confirmation">Are you sure you want to delete \"%1$s\"?</string>
+    <string name="server_name_demo_format">%1$s (Demo)</string>
+    <string name="shared_servers_title">Shared Servers</string>
+    <string name="shared_servers_supporting">Browse SSH services found on the local network</string>
+    <string name="shared_servers_header">Shared servers discovered nearby</string>
+    <string name="shared_servers_empty">No shared servers found yet</string>
+    <string name="shared_servers_refresh">Refresh shared servers</string>
+    <string name="shared_servers_tap_to_import">Tap to import</string>
+    <string name="shared_servers_resolved_supporting">%1$s:%2$d</string>
+
+    <!-- SSH Config Browser -->
+    <string name="ssh_config_title">SSH Config Browser</string>
+    <string name="ssh_config_open_button">Open SSH Config</string>
+    <string name="ssh_config_browse_title">Browse SSH Config</string>
+    <string name="ssh_config_browse_description">Open an SSH config file to discover and import host profiles</string>
+    <string name="ssh_config_no_hosts">No hosts found in this config file</string>
+
+    <!-- Multi-Terminal -->
+    <string name="multi_terminal_title">Multi-Terminal</string>
+    <string name="multi_terminal_no_servers">No servers in this workplace</string>
+    <string name="multi_terminal_loading">Loading…</string>
+    <string name="multi_terminal_disconnected">Disconnected</string>
+    <string name="multi_terminal_tap_to_connect">Tap to connect</string>
+    <string name="multi_terminal_connecting">Connecting…</string>
+    <string name="multi_terminal_verifying_host">Verifying host…</string>
+
+    <!-- Keys -->
+    <string name="keys_certificates">Certificates</string>
+    <string name="keys_encrypted_badge">Encrypted</string>
+
+
+    <string name="settings_biometric_lock_enabled_supporting">Require device biometrics before Termex opens.</string>
+    <string name="settings_biometric_lock_disabled_supporting">Termex opens directly until biometric lock is enabled.</string>
+
+    <string name="diagnostics_title">Diagnostics</string>
+    <string name="diagnostics_share_subject">Termex diagnostics report</string>
+    <string name="diagnostics_share">Share diagnostics</string>
+    <string name="diagnostics_clear">Clear diagnostics</string>
+    <string name="diagnostics_clear_title">Clear diagnostics</string>
+    <string name="diagnostics_clear_message">Remove all recorded diagnostic events from this device?</string>
+    <string name="diagnostics_clear_saved_sessions">Saved terminal sessions</string>
+    <string name="diagnostics_clear_saved_sessions_supporting">Review and clear restored terminal session state.</string>
+    <string name="diagnostics_clear_saved_sessions_dialog">Remove all saved terminal session state? Active connections are not disconnected.</string>
+    <string name="diagnostics_recent_events">Recent events</string>
+    <string name="diagnostics_no_events">No diagnostic events recorded.</string>
+    <string name="diagnostics_summary_title">Environment summary</string>
+    <string name="diagnostics_summary_connections">%1$d active connections · %2$d saved sessions</string>
+    <string name="diagnostics_summary_servers">%1$d servers · %2$d workplaces</string>
+    <string name="diagnostics_summary_credentials">%1$d keys · %2$d certificates · %3$d known hosts · %4$d issues</string>
+    <string name="diagnostics_summary_events">%1$d diagnostic events</string>
+
+    <plurals name="server_issues_summary">
+        <item quantity="one">%1$d server needs attention</item>
+        <item quantity="other">%1$d servers need attention</item>
+    </plurals>
+    <string name="server_issues_summary_supporting">Fix missing credentials or jump-host references before reconnecting.</string>
+    <string name="home_section_active_sessions">Active Sessions</string>
+    <string name="home_active_session_supporting">%1$s@%2$s:%3$d</string>
+    <string name="home_open_session">Open</string>
+    <string name="home_section_recent_sessions">Recent Sessions</string>
+    <string name="home_recent_session_time">Last active %1$s</string>
+    <string name="home_open_workspace">Open</string>
+    <string name="home_section_tools">Tools</string>
+
+    <string name="connection_report_title">Connection Report</string>
+    <string name="connection_report_state">State</string>
+    <string name="connection_report_target">Target</string>
+    <string name="connection_report_auth">Authentication</string>
+    <string name="connection_report_jump_host">Jump host</string>
+    <string name="connection_report_port_forwards">Port forwards</string>
+    <plurals name="connection_report_port_forward_count">
+        <item quantity="one">%1$d configured forward</item>
+        <item quantity="other">%1$d configured forwards</item>
+    </plurals>
+    <string name="connection_report_security_flags">Security flags</string>
+    <string name="connection_report_forward_agent">Forward agent: %1$s</string>
+    <string name="connection_report_identities_only">Identities only: %1$s</string>
+    <string name="connection_report_recent_events">Recent events</string>
+    <string name="connection_report_no_events">No recent events for this connection.</string>
+
+</resources>

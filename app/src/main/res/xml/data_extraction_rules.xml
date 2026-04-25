@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="sharedpref" path="."/>
+        <exclude domain="sharedpref" path="termex_secrets.xml"/>
+        <exclude domain="sharedpref" path="termex_secrets_v2.xml"/>
+        <include domain="database" path="."/>
+        <exclude domain="database" path="termex-session-database"/>
+        <exclude domain="database" path="termex-session-database-shm"/>
+        <exclude domain="database" path="termex-session-database-wal"/>
+        <exclude domain="database" path="termex-session-database-journal"/>
+    </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="."/>
+        <exclude domain="sharedpref" path="termex_secrets.xml"/>
+        <exclude domain="sharedpref" path="termex_secrets_v2.xml"/>
+        <include domain="database" path="."/>
+        <exclude domain="database" path="termex-session-database"/>
+        <exclude domain="database" path="termex-session-database-shm"/>
+        <exclude domain="database" path="termex-session-database-wal"/>
+        <exclude domain="database" path="termex-session-database-journal"/>
+    </device-transfer>
+</data-extraction-rules>

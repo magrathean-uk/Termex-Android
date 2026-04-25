@@ -1,0 +1,68 @@
+# macOS
+.DS_Store
+
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Signing config (never commit)
+keystore.properties
+
+# IntelliJ/Android Studio
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Android
+*.apk
+*.ap_
+*.aab
+*.dex
+
+# Logs
+*.log
+
+# Generated files
+captures/
+externalNativeBuild/
+.cxx/
+
+# Kotlin
+*.class
+
+# Backup files
+*.bak
+*.finalbak
+
+# Keystore files
+*.jks
+*.keystore
+# codex-shared-ignore
+.DS_Store
+*.log
+*.tmp
+*.swp
+*.swo
+.env
+.env.*
+*.pem
+*.key
+*.p8
+*.p12
+*.jks
+*.keystore
+.build/
+DerivedData/
+build/
+dist/
+out/
+target/
+node_modules/
+.gradle/
+Pods/
+.swiftpm/
