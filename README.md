@@ -40,7 +40,7 @@ source /Users/bolyki/dev/source/build-env.sh
 ## License
 
 Termex-Android is released under the [MIT License](LICENSE).
-Copyright (c) 2024–2025 Bolyki György.
+Copyright (c) 2024–2025 Magrathean UK.
 
 This project uses open-source dependencies. See [docs/THIRD_PARTY_LICENSES.md](docs/THIRD_PARTY_LICENSES.md)
 for the full list of libraries and their licenses.
