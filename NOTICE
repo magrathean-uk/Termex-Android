@@ -1,0 +1,86 @@
+Termex-Android
+Copyright (c) 2024–2025 Bolyki György
+
+This product includes software developed by third parties. Their licenses and
+notices are listed below and in full in docs/THIRD_PARTY_LICENSES.md.
+
+---
+
+Apache MINA SSHD
+Copyright 2008–2024 The Apache Software Foundation
+Licensed under the Apache License, Version 2.0.
+https://mina.apache.org/sshd-project/
+
+---
+
+AndroidX / Jetpack Libraries
+Copyright The Android Open Source Project
+Licensed under the Apache License, Version 2.0.
+https://developer.android.com/jetpack
+
+---
+
+Dagger / Hilt
+Copyright 2012 The Dagger Authors
+Licensed under the Apache License, Version 2.0.
+https://dagger.dev/hilt/
+
+---
+
+Kotlin Standard Library, Coroutines, and Serialization
+Copyright 2010–2024 JetBrains s.r.o. and Kotlin Programming Language contributors
+Licensed under the Apache License, Version 2.0.
+https://kotlinlang.org/
+
+---
+
+Google Material Components for Android
+Copyright The Android Open Source Project
+Licensed under the Apache License, Version 2.0.
+https://github.com/material-components/material-components-android
+
+---
+
+WorkManager
+Copyright The Android Open Source Project
+Licensed under the Apache License, Version 2.0.
+https://developer.android.com/topic/libraries/architecture/workmanager
+
+---
+
+The Bouncy Castle Crypto APIs
+Copyright (c) 2000–2024 The Legion Of The Bouncy Castle Inc.
+Licensed under the Bouncy Castle Licence (MIT-style).
+https://www.bouncycastle.org/
+
+---
+
+SLF4J
+Copyright (c) 2004–2023 QOS.ch Sarl
+Licensed under the MIT License.
+https://www.slf4j.org/
+
+---
+
+eddsa (net.i2p.crypto)
+Dedicated to the public domain (CC0 1.0 Universal).
+https://github.com/str4d/ed25519-java
+
+---
+
+LeakCanary (debug builds only)
+Copyright 2015 Square, Inc.
+Licensed under the Apache License, Version 2.0.
+https://square.github.io/leakcanary/
+
+---
+
+OkHttp / MockWebServer (test builds only)
+Copyright 2019 Square, Inc.
+Licensed under the Apache License, Version 2.0.
+https://square.github.io/okhttp/
+
+---
+
+A copy of the Apache License, Version 2.0 is available at:
+https://www.apache.org/licenses/LICENSE-2.0
