@@ -2,6 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
+> **Development on this project has ceased.** The repository is archived for reference and the code is available under the MIT license.
+
 Termex-Android is a free, open-source Android SSH client built with Jetpack Compose.
 
 It supports guided server setup, host-key verification, password and key authentication, certificates, jump hosts, snippets, workspaces, biometric app lock, diagnostics, local archive transfer, saved sessions, and local/remote/dynamic port forwarding.
